@@ -1,0 +1,82 @@
+# Stack local: Postgres 16 + n8n 1.80.0 + Cloudflared (tunnel público).
+# Postgres NO se expone al host; solo n8n lo accede por la red interna.
+# Para arrancar el stack usar: ./scripts/up.sh (necesario para obtener la
+# URL del tunnel ANTES de levantar n8n).
+# Documentación n8n: https://docs.n8n.io/hosting/installation/docker/
+
+name: lemut_n8n
+
+services:
+  postgres:
+    image: postgres:16.6
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      TZ: America/Mexico_City
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # n8n esperará a que este healthcheck pase antes de arrancar.
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - lemut_net
+    # Sin sección "ports": Postgres queda aislado en la red interna.
+
+  cloudflared:
+    image: cloudflare/cloudflared:2024.12.2
+    restart: unless-stopped
+    # Quick tunnel: URL pública aleatoria en *.trycloudflare.com,
+    # sin cuenta ni autenticación. La URL aparece en los logs.
+    command: tunnel --no-autoupdate --url http://n8n:5678
+    networks:
+      - lemut_net
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:1.80.0
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Las vars de WEBHOOK_URL / N8N_HOST vienen de .tunnel.env, que
+    # genera el script up.sh leyendo la URL del log de cloudflared.
+    env_file:
+      - .tunnel.env
+    environment:
+      # --- Conexión a Postgres (red interna del compose) ---
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: ${POSTGRES_DB}
+      DB_POSTGRESDB_USER: ${POSTGRES_USER}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
+
+      # --- Zona horaria ---
+      GENERIC_TIMEZONE: America/Mexico_City
+      TZ: America/Mexico_City
+
+      # --- Configuración del servidor ---
+      # N8N_HOST, N8N_PROTOCOL y WEBHOOK_URL las define .tunnel.env.
+      N8N_PORT: 5678
+
+      # Recomendación de n8n 1.80 para nuevas instalaciones.
+      N8N_RUNNERS_ENABLED: "true"
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks:
+      - lemut_net
+
+volumes:
+  postgres_data:
+  n8n_data:
+
+networks:
+  lemut_net:
+    driver: bridge

@@ -1,0 +1,29 @@
+# Variables de entorno con secretos
+.env
+.env.local
+.env.*.local
+
+# Generado por scripts/up.sh — contiene la URL del tunnel (cambia cada sesión)
+.tunnel.env
+
+# Logs
+*.log
+logs/
+
+# Datos locales (por si alguien decide montar volúmenes a carpeta)
+data/
+postgres-data/
+n8n-data/
+
+# Editores
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Node (por si en futuro se agregan scripts)
+node_modules/
