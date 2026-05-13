@@ -1,0 +1,116 @@
+{
+  "name": "Gemini Chat",
+  "active": false,
+  "nodes": [
+    {
+      "id": "node-trigger",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "parameters": {
+        "updates": ["message"],
+        "additionalFields": {}
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "Fw58BUoSTogqEGTc",
+          "name": "Telegram account"
+        }
+      },
+      "webhookId": "gemini-chat-trigger-webhook"
+    },
+    {
+      "id": "node-chain",
+      "name": "Basic LLM Chain",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [480, 300],
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.message.text }}",
+        "messages": {
+          "messageValues": [
+            {
+              "type": "system",
+              "messageType": "text",
+              "message": "Eres un asistente útil y conciso. Respondes en español mexicano. Máximo 3 oraciones."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "node-gemini",
+      "name": "Google Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [480, 520],
+      "parameters": {
+        "modelName": "models/gemini-2.5-flash-lite",
+        "options": {}
+      },
+      "credentials": {
+        "googlePalmApi": {
+          "id": "gemini-lemut-cred",
+          "name": "Gemini Lemut"
+        }
+      }
+    },
+    {
+      "id": "node-send",
+      "name": "Send Reply",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [760, 220],
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "={{ ($json.text || '').toString().substring(0, 4090) }}",
+        "additionalFields": {}
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "Fw58BUoSTogqEGTc",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "id": "node-fallback",
+      "name": "Send Fallback",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [760, 400],
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "Disculpa, hubo un problema, intenta de nuevo en un momento.",
+        "additionalFields": {}
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "Fw58BUoSTogqEGTc",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [[{ "node": "Basic LLM Chain", "type": "main", "index": 0 }]]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [{ "node": "Send Reply", "type": "main", "index": 0 }],
+        [{ "node": "Send Fallback", "type": "main", "index": 0 }]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [[{ "node": "Basic LLM Chain", "type": "ai_languageModel", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Mexico_City"
+  }
+}
