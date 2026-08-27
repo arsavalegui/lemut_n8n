@@ -70,6 +70,9 @@ services:
       - "5678:5678"
     volumes:
       - n8n_data:/home/node/.n8n
+      # Documentos "fuente de verdad" del cliente (RAG). Read-only para
+      # que n8n no pueda escribir aquí; el cliente edita en el host.
+      - ./knowledge:/knowledge:ro
     networks:
       - lemut_net
 

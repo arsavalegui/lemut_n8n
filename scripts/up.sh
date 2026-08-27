@@ -16,10 +16,17 @@ touch .tunnel.env
 
 # --- helpers ---
 url_alive() {
-  # Considera la URL "viva" si curl recibe cualquier respuesta < 400 antes de 5s.
+  # Considera la URL "viva" si el tunnel responde cualquier código HTTP en 5s.
+  # No exigimos <400 porque al arrancar n8n todavía no corre y el tunnel
+  # devuelve 502/503: el tunnel sí está vivo aunque el backend no.
   local url="$1"
   [ -z "$url" ] && return 1
-  curl -sf --max-time 5 -o /dev/null "$url"
+  # curl -w '%{http_code}' ya imprime "000" cuando falla la conexión/DNS,
+  # así que no encadenamos "|| echo 000" (duplicaría el string a "000000"
+  # y el chequeo daría falso positivo).
+  local code
+  code=$(curl -s --max-time 5 -o /dev/null -w '%{http_code}' "$url" 2>/dev/null)
+  [ -n "$code" ] && [ "$code" != "000" ]
 }
 
 extract_tunnel_url() {
