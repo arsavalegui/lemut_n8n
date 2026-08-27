@@ -1,0 +1,102 @@
+{
+  "id": "LemutRouter0001A",
+  "name": "Router",
+  "active": false,
+  "nodes": [
+    {
+      "id": "node-trigger",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "parameters": {
+        "updates": ["message"],
+        "additionalFields": {}
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "Fw58BUoSTogqEGTc",
+          "name": "Telegram account"
+        }
+      },
+      "webhookId": "lemut-router-webhook"
+    },
+    {
+      "id": "node-es-admin-cmd",
+      "name": "¿Comando de admin?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [460, 300],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-regex-admin",
+              "leftValue": "={{ $json.message?.text ?? '' }}",
+              "rightValue": "^\\/(soyadmin|hoy|agenda)\\b",
+              "operator": {
+                "type": "string",
+                "operation": "regex"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "node-a-admin",
+      "name": "Ir a Agenda Admin",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [700, 200],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "LemutAgendaAdmin",
+          "mode": "list",
+          "cachedResultName": "Agenda Admin"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "node-a-rag",
+      "name": "Ir a RAG Chat",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [700, 400],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "DkYcD5YSTkZwF6yl",
+          "mode": "list",
+          "cachedResultName": "RAG Chat"
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [[{ "node": "¿Comando de admin?", "type": "main", "index": 0 }]]
+    },
+    "¿Comando de admin?": {
+      "main": [
+        [{ "node": "Ir a Agenda Admin", "type": "main", "index": 0 }],
+        [{ "node": "Ir a RAG Chat", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Mexico_City"
+  }
+}

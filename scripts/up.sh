@@ -24,8 +24,18 @@ url_alive() {
   # curl -w '%{http_code}' ya imprime "000" cuando falla la conexión/DNS,
   # así que no encadenamos "|| echo 000" (duplicaría el string a "000000"
   # y el chequeo daría falso positivo).
-  local code
+  local code host ip
   code=$(curl -s --max-time 5 -o /dev/null -w '%{http_code}' "$url" 2>/dev/null)
+  if [ -n "$code" ] && [ "$code" != "000" ]; then return 0; fi
+  # El DNS local (el router) puede tardar varios minutos en conocer un
+  # subdominio nuevo de trycloudflare y cachear el "no existe". Antes de
+  # dar la URL por muerta, resolvemos directo con 1.1.1.1 — que es lo que
+  # ven Telegram y el resto del mundo — y probamos contra esa IP.
+  host="${url#https://}"; host="${host%%/*}"
+  ip=$(dig +short @1.1.1.1 "$host" 2>/dev/null | head -1)
+  [ -z "$ip" ] && return 1
+  code=$(curl -s --max-time 5 -o /dev/null -w '%{http_code}' \
+    --resolve "$host:443:$ip" "https://$host" 2>/dev/null)
   [ -n "$code" ] && [ "$code" != "000" ]
 }
 
@@ -50,9 +60,9 @@ else
     docker compose restart cloudflared >/dev/null
   fi
 
-  echo "▶ Esperando URL del tunnel viva (timeout 60s)..."
+  echo "▶ Esperando URL del tunnel viva (timeout 120s)..."
   URL=""
-  for i in $(seq 1 60); do
+  for i in $(seq 1 120); do
     CANDIDATE=$(extract_tunnel_url || true)
     # Si la última URL del log es la stale, esperar a que aparezca una nueva.
     if [ -n "$CANDIDATE" ] && [ "$CANDIDATE" != "$EXISTING_URL" ] && url_alive "$CANDIDATE"; then
@@ -63,7 +73,7 @@ else
   done
 
   if [ -z "$URL" ]; then
-    echo "✗ No se obtuvo URL del tunnel viva en 60s. Últimos logs:"
+    echo "✗ No se obtuvo URL del tunnel viva en 120s. Últimos logs:"
     docker compose logs cloudflared --tail 30
     exit 1
   fi

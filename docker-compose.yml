@@ -66,6 +66,11 @@ services:
 
       # Recomendación de n8n 1.80 para nuevas instalaciones.
       N8N_RUNNERS_ENABLED: "true"
+
+      # --- Fase agenda ---
+      # Código que el gerente escribe una vez (/soyadmin CODIGO) para
+      # registrarse como admin. El workflow lo lee vía $env.
+      ADMIN_SETUP_CODE: ${ADMIN_SETUP_CODE}
     ports:
       - "5678:5678"
     volumes:

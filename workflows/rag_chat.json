@@ -1,24 +1,17 @@
 {
-  "name": "Gemini Chat",
+  "id": "DkYcD5YSTkZwF6yl",
+  "name": "RAG Chat",
   "active": false,
   "nodes": [
     {
-      "id": "node-trigger",
-      "name": "Telegram Trigger",
-      "type": "n8n-nodes-base.telegramTrigger",
+      "id": "node-entrada",
+      "name": "Entrada",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.1,
       "position": [240, 300],
       "parameters": {
-        "updates": ["message"],
-        "additionalFields": {}
-      },
-      "credentials": {
-        "telegramApi": {
-          "id": "Fw58BUoSTogqEGTc",
-          "name": "Telegram account"
-        }
-      },
-      "webhookId": "gemini-chat-trigger-webhook"
+        "inputSource": "passthrough"
+      }
     },
     {
       "id": "node-read-knowledge",
@@ -52,7 +45,7 @@
       "onError": "continueErrorOutput",
       "parameters": {
         "promptType": "define",
-        "text": "={{ $('Telegram Trigger').item.json.message.text }}",
+        "text": "={{ $('Entrada').item.json.message.text }}",
         "messages": {
           "messageValues": [
             {
@@ -86,7 +79,7 @@
       "typeVersion": 1.2,
       "position": [1040, 220],
       "parameters": {
-        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "chatId": "={{ $('Entrada').item.json.message.chat.id }}",
         "text": "={{ ($json.text || '').toString().substring(0, 4090) }}",
         "additionalFields": {
           "appendAttribution": false
@@ -106,7 +99,7 @@
       "typeVersion": 1.2,
       "position": [1040, 400],
       "parameters": {
-        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "chatId": "={{ $('Entrada').item.json.message.chat.id }}",
         "text": "Disculpa, hubo un problema, intenta de nuevo en un momento.",
         "additionalFields": {
           "appendAttribution": false
@@ -121,7 +114,7 @@
     }
   ],
   "connections": {
-    "Telegram Trigger": {
+    "Entrada": {
       "main": [[{ "node": "Read Knowledge File", "type": "main", "index": 0 }]]
     },
     "Read Knowledge File": {

@@ -1,0 +1,311 @@
+{
+  "id": "LemutAgendaAdmin",
+  "name": "Agenda Admin",
+  "active": false,
+  "nodes": [
+    {
+      "id": "node-entrada",
+      "name": "Entrada",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [200, 400],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "node-parsear",
+      "name": "Parsear comando",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 400],
+      "parameters": {
+        "jsCode": "// Extrae comando, argumento y datos del remitente del update de Telegram.\nconst upd = $input.first().json;\nconst msg = upd.message ?? {};\nconst text = (msg.text ?? '').trim();\nconst partes = text.split(/\\s+/);\nconst cmd = (partes[0] ?? '').replace('/', '').toLowerCase();\nconst arg = partes.slice(1).join(' ').trim();\nconst nombre = [msg.from?.first_name, msg.from?.last_name].filter(Boolean).join(' ') || 'Admin';\nreturn [{ json: { cmd, arg, chat_id: msg.chat?.id, nombre } }];"
+      }
+    },
+    {
+      "id": "node-es-soyadmin",
+      "name": "¿Es /soyadmin?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [600, 400],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-soyadmin",
+              "leftValue": "={{ $json.cmd }}",
+              "rightValue": "soyadmin",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "node-codigo-ok",
+      "name": "¿Código correcto?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [820, 240],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-codigo",
+              "leftValue": "={{ $json.arg }}",
+              "rightValue": "={{ $env.ADMIN_SETUP_CODE }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "node-registrar",
+      "name": "Registrar admin",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1040, 160],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO agenda.admins (chat_id, nombre) VALUES ($1, $2) ON CONFLICT (chat_id) DO UPDATE SET nombre = EXCLUDED.nombre RETURNING chat_id;",
+        "options": {
+          "queryReplacement": "={{ $json.chat_id }},{{ $json.nombre }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "PostgresLemut001",
+          "name": "Postgres Lemut"
+        }
+      }
+    },
+    {
+      "id": "node-confirmar-registro",
+      "name": "Confirmar registro",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1260, 160],
+      "parameters": {
+        "chatId": "={{ $('Parsear comando').first().json.chat_id }}",
+        "text": "=✅ Listo, {{ $('Parsear comando').first().json.nombre }}. Quedaste registrado como admin.\n\nComandos disponibles:\n/hoy — citas de hoy\n/agenda — próximas citas\n/agenda <barbero> — próximas citas de un barbero",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "Fw58BUoSTogqEGTc",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "id": "node-codigo-mal",
+      "name": "Código incorrecto",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1040, 320],
+      "parameters": {
+        "chatId": "={{ $('Parsear comando').first().json.chat_id }}",
+        "text": "❌ Código incorrecto. Escribe /soyadmin seguido del código de 6 dígitos que te dieron.",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "Fw58BUoSTogqEGTc",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "id": "node-verificar-admin",
+      "name": "Verificar admin",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [820, 540],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT EXISTS(SELECT 1 FROM agenda.admins WHERE chat_id = $1) AS es_admin;",
+        "options": {
+          "queryReplacement": "={{ $json.chat_id }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "PostgresLemut001",
+          "name": "Postgres Lemut"
+        }
+      }
+    },
+    {
+      "id": "node-es-admin",
+      "name": "¿Es admin?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1040, 540],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-es-admin",
+              "leftValue": "={{ $json.es_admin }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "node-consultar-citas",
+      "name": "Consultar citas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1260, 460],
+      "alwaysOutputData": true,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT trabajador, servicio, to_char(fecha, 'DD/MM') AS fecha, to_char(hora_inicio, 'HH24:MI') AS hora, cliente_nombre, cliente_telefono FROM agenda.bookings WHERE estado = 'confirmada' AND fecha >= (now() AT TIME ZONE 'America/Mexico_City')::date AND ($1 <> 'hoy' OR fecha = (now() AT TIME ZONE 'America/Mexico_City')::date) AND ($2 = '' OR trabajador ILIKE '%' || $2 || '%') ORDER BY fecha, hora_inicio LIMIT 40;",
+        "options": {
+          "queryReplacement": "={{ $('Parsear comando').first().json.cmd }},{{ $('Parsear comando').first().json.arg }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "PostgresLemut001",
+          "name": "Postgres Lemut"
+        }
+      }
+    },
+    {
+      "id": "node-formatear",
+      "name": "Formatear agenda",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1480, 460],
+      "parameters": {
+        "jsCode": "// Arma el mensaje de agenda para el admin.\nconst p = $('Parsear comando').first().json;\nconst filas = $input.all().map(i => i.json).filter(f => f.trabajador);\nlet texto;\nif (filas.length === 0) {\n  texto = p.cmd === 'hoy'\n    ? 'No hay citas para hoy.'\n    : (p.arg ? `No hay citas próximas para \"${p.arg}\".` : 'No hay citas próximas.');\n} else {\n  const titulo = p.cmd === 'hoy'\n    ? '📅 Citas de hoy'\n    : (p.arg ? `📅 Próximas citas de ${p.arg}` : '📅 Próximas citas');\n  const lineas = filas.map(f => `• ${f.fecha} ${f.hora} — ${f.trabajador}: ${f.servicio}\\n   ${f.cliente_nombre} · ${f.cliente_telefono}`);\n  texto = `${titulo}\\n\\n${lineas.join('\\n')}`;\n}\nreturn [{ json: { texto: texto.substring(0, 4090) } }];"
+      }
+    },
+    {
+      "id": "node-enviar-agenda",
+      "name": "Enviar agenda",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1700, 460],
+      "parameters": {
+        "chatId": "={{ $('Parsear comando').first().json.chat_id }}",
+        "text": "={{ $json.texto }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "Fw58BUoSTogqEGTc",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "id": "node-no-autorizado",
+      "name": "No autorizado",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1260, 640],
+      "parameters": {
+        "chatId": "={{ $('Parsear comando').first().json.chat_id }}",
+        "text": "No estás autorizado para usar comandos de admin.",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "Fw58BUoSTogqEGTc",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Entrada": {
+      "main": [[{ "node": "Parsear comando", "type": "main", "index": 0 }]]
+    },
+    "Parsear comando": {
+      "main": [[{ "node": "¿Es /soyadmin?", "type": "main", "index": 0 }]]
+    },
+    "¿Es /soyadmin?": {
+      "main": [
+        [{ "node": "¿Código correcto?", "type": "main", "index": 0 }],
+        [{ "node": "Verificar admin", "type": "main", "index": 0 }]
+      ]
+    },
+    "¿Código correcto?": {
+      "main": [
+        [{ "node": "Registrar admin", "type": "main", "index": 0 }],
+        [{ "node": "Código incorrecto", "type": "main", "index": 0 }]
+      ]
+    },
+    "Registrar admin": {
+      "main": [[{ "node": "Confirmar registro", "type": "main", "index": 0 }]]
+    },
+    "Verificar admin": {
+      "main": [[{ "node": "¿Es admin?", "type": "main", "index": 0 }]]
+    },
+    "¿Es admin?": {
+      "main": [
+        [{ "node": "Consultar citas", "type": "main", "index": 0 }],
+        [{ "node": "No autorizado", "type": "main", "index": 0 }]
+      ]
+    },
+    "Consultar citas": {
+      "main": [[{ "node": "Formatear agenda", "type": "main", "index": 0 }]]
+    },
+    "Formatear agenda": {
+      "main": [[{ "node": "Enviar agenda", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Mexico_City"
+  }
+}
