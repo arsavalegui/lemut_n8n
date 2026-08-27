@@ -27,3 +27,4 @@ Thumbs.db
 
 # Node (por si en futuro se agregan scripts)
 node_modules/
+__pycache__/
