@@ -129,9 +129,10 @@
       ],
       "parameters": {
         "chatId": "={{ $('Parsear comando').first().json.chat_id }}",
-        "text": "=✅ Listo, {{ $('Parsear comando').first().json.nombre }}. Quedaste registrado como admin.\n\nComandos disponibles:\n/hoy — citas de hoy\n/agenda — próximas citas\n/agenda <barbero> — próximas citas de un barbero",
+        "text": "=✅ Listo, {{ ($('Parsear comando').first().json.nombre).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }}. Quedaste registrado como admin.\n\nComandos disponibles:\n/hoy — citas de hoy\n/agenda — próximas citas\n/agenda [barbero] — próximas citas de un barbero",
         "additionalFields": {
-          "appendAttribution": false
+          "appendAttribution": false,
+          "parse_mode": "HTML"
         }
       },
       "credentials": {
@@ -269,9 +270,10 @@
       ],
       "parameters": {
         "chatId": "={{ $('Parsear comando').first().json.chat_id }}",
-        "text": "={{ $json.texto }}",
+        "text": "={{ ($json.texto || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }}",
         "additionalFields": {
-          "appendAttribution": false
+          "appendAttribution": false,
+          "parse_mode": "HTML"
         }
       },
       "credentials": {
