@@ -130,10 +130,24 @@ function tecladoHuecos(hs) {
 const payloads = [];
 // 'state' nunca viaja vacío: n8n descarta parámetros '' en queryReplacement.
 let stateOp = { action: 'none', state: '-', ctxB64: 'e30=' };
+// Intento de reserva (Fase C). El INSERT lo hace el nodo "Insertar cita"
+// (gateado por action='book') y "Resolver reserva" arma los mensajes según
+// si la fila entró o el hueco ya estaba tomado. Los dummies son casteables
+// porque Postgres los parsea aunque el WHERE los descarte.
+let booking = {
+  action: 'none', trabajador: '-', servicio: '-', dur: 0,
+  fecha: '1970-01-01', ini: '00:00', fin: '00:00',
+  nombreB64: 'LQ==', telefono: '-', cliente_chat_id: 0, fechaEtiqueta: '-',
+};
 
 function enviar(textoMsg, teclado) {
   const body = { chat_id: chatId, text: textoMsg };
-  if (teclado) body.reply_markup = { inline_keyboard: teclado };
+  if (Array.isArray(teclado)) body.reply_markup = { inline_keyboard: teclado };
+  else if (teclado === 'contacto') body.reply_markup = {
+    keyboard: [[{ text: '📱 Compartir mi teléfono', request_contact: true }]],
+    one_time_keyboard: true, resize_keyboard: true,
+  };
+  else if (teclado === 'quitar') body.reply_markup = { remove_keyboard: true };
   payloads.push({ method: 'sendMessage', body });
 }
 function setEstado(state, ctx) {
@@ -158,6 +172,9 @@ if (cb) {
     const b = barberos[+valor];
     setEstado('dia', { ...ctx, barbero: b });
     enviar(`¿Qué día quieres tu cita con ${b}?`, tecladoDias(b));
+  } else if (tipo === 'dia' && state === 'dia' && !diasDisponibles(ctx.barbero).map(fechaISO).includes(valor)) {
+    // Botón de un día que ya salió de la ventana de 7 días (o data inventada).
+    enviar(`Ese día ya no está disponible. Elige uno de estos:`, tecladoDias(ctx.barbero));
   } else if (tipo === 'dia' && state === 'dia') {
     const hs = calcularHuecos(ctx.barbero, valor, ctx.dur ?? 30);
     if (hs.length === 0) {
@@ -167,8 +184,8 @@ if (cb) {
       enviar(`Horarios libres de ${ctx.barbero} el ${etiquetaISO(valor)} para ${ctx.servicio}:`, tecladoHuecos(hs));
     }
   } else if (tipo === 'hueco' && state === 'hueco') {
-    limpiarEstado();
-    enviar(`🚧 Elegiste las ${valor} del ${etiquetaISO(ctx.fecha)} con ${ctx.barbero} — ¡buena elección! La confirmación de la cita (con tu teléfono) se habilita en la siguiente fase, así que aún NO quedó guardada.`);
+    setEstado('telefono', { ...ctx, hora: valor });
+    enviar(`Casi listo 🙌\n\n💈 ${ctx.servicio}\n👤 ${ctx.barbero}\n📆 ${etiquetaISO(ctx.fecha)} a las ${valor}\n\nPara confirmar tu cita, comparte tu teléfono con el botón de aquí abajo 👇`, 'contacto');
   } else {
     enviar('Ese menú ya venció. Escribe "agendar" para empezar de nuevo.');
   }
@@ -176,7 +193,34 @@ if (cb) {
   limpiarEstado();
   enviar(state
     ? 'Listo, cancelé el proceso de agendado. ¿Te ayudo con algo más?'
-    : 'No tenías ningún agendado en curso. ¿Te ayudo con algo más?');
+    : 'No tenías ningún agendado en curso. ¿Te ayudo con algo más?', 'quitar');
+} else if (upd.message?.contact && state === 'telefono') {
+  const contacto = upd.message.contact;
+  if (contacto.user_id && upd.message.from?.id && contacto.user_id !== upd.message.from.id) {
+    // Contacto reenviado de otra persona: el teléfono debe ser del propio cliente.
+    enviar('Ese contacto no es tuyo 🤔 — usa el botón "📱 Compartir mi teléfono" para mandar tu propio número.', 'contacto');
+  } else {
+    const nombre = [contacto.first_name, contacto.last_name].filter(Boolean).join(' ')
+      || [upd.message.from?.first_name, upd.message.from?.last_name].filter(Boolean).join(' ')
+      || 'Cliente';
+    booking = {
+      action: 'book',
+      trabajador: ctx.barbero,
+      servicio: ctx.servicio,
+      dur: ctx.dur,
+      fecha: ctx.fecha,
+      ini: ctx.hora,
+      fin: aHHMM(aMin(ctx.hora) + ctx.dur),
+      nombreB64: Buffer.from(nombre).toString('base64'),
+      telefono: contacto.phone_number ?? '-',
+      cliente_chat_id: chatId,
+      fechaEtiqueta: etiquetaISO(ctx.fecha),
+    };
+    // Los mensajes y la limpieza de estado los decide "Resolver reserva"
+    // según el resultado del INSERT (hueco libre vs recién ocupado).
+  }
+} else if (state === 'telefono') {
+  enviar('Para confirmar tu cita comparte tu teléfono con el botón "📱 Compartir mi teléfono" que te mandé, o escribe /cancelar para salir.', 'contacto');
 } else if (!state) {
   setEstado('servicio', {});
   enviar('¡Va! Vamos a agendar tu cita. ¿Qué servicio quieres?', tecladoServicios());
@@ -184,4 +228,4 @@ if (cb) {
   enviar('Estás agendando una cita — elige una opción del último menú que te mandé, o escribe /cancelar para salir.');
 }
 
-return [{ json: { chat_id: chatId, payloads, state_op: stateOp } }];
+return [{ json: { chat_id: chatId, payloads, state_op: stateOp, booking } }];

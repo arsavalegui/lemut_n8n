@@ -93,6 +93,83 @@ workflow = {
             "parameters": {"jsCode": MOTOR},
         },
         {
+            "id": "node-insertar-cita",
+            "name": "Insertar cita",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.5,
+            "position": [1400, 180],
+            "alwaysOutputData": True,
+            "parameters": {
+                "operation": "executeQuery",
+                # INSERT atómico: sólo entra si $1='book' Y ningún booking
+                # confirmado del mismo barbero se traslapa (NOT EXISTS).
+                # El índice único parcial cubre el empate exacto de carrera.
+                "query": "INSERT INTO agenda.bookings (trabajador, servicio, duracion_min, fecha, hora_inicio, hora_fin, cliente_nombre, cliente_telefono, cliente_chat_id, estado) SELECT $2, $3, $4::int, $5::date, $6::time, $7::time, convert_from(decode($8, 'base64'), 'UTF8'), $9, $10::bigint, 'confirmada' WHERE $1 = 'book' AND NOT EXISTS (SELECT 1 FROM agenda.bookings WHERE estado = 'confirmada' AND trabajador = $2 AND fecha = $5::date AND hora_inicio < $7::time AND hora_fin > $6::time) ON CONFLICT (trabajador, fecha, hora_inicio) WHERE estado = 'confirmada' DO NOTHING RETURNING id;",
+                "options": {
+                    "queryReplacement": "={{ $json.booking.action }},{{ $json.booking.trabajador }},{{ $json.booking.servicio }},{{ $json.booking.dur }},{{ $json.booking.fecha }},{{ $json.booking.ini }},{{ $json.booking.fin }},{{ $json.booking.nombreB64 }},{{ $json.booking.telefono }},{{ $json.booking.cliente_chat_id }}"
+                },
+            },
+            "credentials": {"postgres": POSTGRES_CRED},
+        },
+        {
+            "id": "node-leer-admins",
+            "name": "Leer admins",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.5,
+            "position": [1400, 420],
+            "alwaysOutputData": True,
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT chat_id FROM agenda.admins;",
+                "options": {},
+            },
+            "credentials": {"postgres": POSTGRES_CRED},
+        },
+        {
+            "id": "node-resolver",
+            "name": "Resolver reserva",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [1560, 300],
+            "parameters": {
+                "jsCode": (
+                    "// Si el motor pidió reservar, arma los mensajes según el resultado\n"
+                    "// del INSERT: confirmación al cliente + aviso a cada admin, o el\n"
+                    "// mensaje de hueco recién ocupado. Si no hubo reserva, passthrough.\n"
+                    "const m = $('Motor de agenda').first().json;\n"
+                    "if (m.booking.action !== 'book') {\n"
+                    "  return [{ json: { chat_id: m.chat_id, payloads: m.payloads, state_op: m.state_op } }];\n"
+                    "}\n"
+                    "const insertadas = $('Insertar cita').all().map(i => i.json).filter(r => r.id !== undefined);\n"
+                    "const admins = $('Leer admins').all().map(i => i.json).filter(a => a.chat_id);\n"
+                    "const b = m.booking;\n"
+                    "const nombre = Buffer.from(b.nombreB64, 'base64').toString('utf8');\n"
+                    "const payloads = [...m.payloads];\n"
+                    "const state_op = { action: 'clear', state: '-', ctxB64: 'e30=' };\n"
+                    "if (insertadas.length > 0) {\n"
+                    "  payloads.push({ method: 'sendMessage', body: {\n"
+                    "    chat_id: m.chat_id,\n"
+                    "    text: `✅ ¡Cita confirmada, ${nombre}!\\n\\n💈 ${b.servicio}\\n👤 ${b.trabajador}\\n📆 ${b.fechaEtiqueta} de ${b.ini} a ${b.fin}\\n\\nSi no puedes venir, avísanos con anticipación. ¡Te esperamos!`,\n"
+                    "    reply_markup: { remove_keyboard: true },\n"
+                    "  } });\n"
+                    "  for (const a of admins) {\n"
+                    "    payloads.push({ method: 'sendMessage', body: {\n"
+                    "      chat_id: a.chat_id,\n"
+                    "      text: `📅 Nueva cita agendada\\n\\n${b.fechaEtiqueta} · ${b.ini}–${b.fin}\\n💈 ${b.servicio}\\n👤 Barbero: ${b.trabajador}\\nCliente: ${nombre} · ${b.telefono}`,\n"
+                    "    } });\n"
+                    "  }\n"
+                    "} else {\n"
+                    "  payloads.push({ method: 'sendMessage', body: {\n"
+                    "    chat_id: m.chat_id,\n"
+                    "    text: '😕 Uy, ese horario se acaba de ocupar. Escribe \"agendar\" para elegir otro.',\n"
+                    "    reply_markup: { remove_keyboard: true },\n"
+                    "  } });\n"
+                    "}\n"
+                    "return [{ json: { chat_id: m.chat_id, payloads, state_op } }];"
+                ),
+            },
+        },
+        {
             "id": "node-guardar-estado",
             "name": "Guardar estado",
             "type": "n8n-nodes-base.postgres",
@@ -118,7 +195,7 @@ workflow = {
             "typeVersion": 2,
             "position": [1600, 300],
             "parameters": {
-                "jsCode": "// Un item por llamada a la API de Telegram que pidió el motor.\nreturn $('Motor de agenda').first().json.payloads.map(p => ({ json: p }));"
+                "jsCode": "// Un item por llamada a la API de Telegram que dejó lista el resolver.\nreturn $('Resolver reserva').first().json.payloads.map(p => ({ json: p }));"
             },
         },
         {
@@ -144,7 +221,10 @@ workflow = {
         "Leer citas": {"main": [[{"node": "Leer doc del negocio", "type": "main", "index": 0}]]},
         "Leer doc del negocio": {"main": [[{"node": "Extraer texto", "type": "main", "index": 0}]]},
         "Extraer texto": {"main": [[{"node": "Motor de agenda", "type": "main", "index": 0}]]},
-        "Motor de agenda": {"main": [[{"node": "Guardar estado", "type": "main", "index": 0}]]},
+        "Motor de agenda": {"main": [[{"node": "Insertar cita", "type": "main", "index": 0}]]},
+        "Insertar cita": {"main": [[{"node": "Leer admins", "type": "main", "index": 0}]]},
+        "Leer admins": {"main": [[{"node": "Resolver reserva", "type": "main", "index": 0}]]},
+        "Resolver reserva": {"main": [[{"node": "Guardar estado", "type": "main", "index": 0}]]},
         "Guardar estado": {"main": [[{"node": "Preparar llamadas", "type": "main", "index": 0}]]},
         "Preparar llamadas": {"main": [[{"node": "Llamar Telegram", "type": "main", "index": 0}]]},
     },
