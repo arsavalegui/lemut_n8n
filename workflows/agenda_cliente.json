@@ -1,0 +1,260 @@
+{
+  "id": "LemutAgendaCli01",
+  "name": "Agenda Cliente",
+  "active": false,
+  "nodes": [
+    {
+      "id": "node-entrada",
+      "name": "Entrada",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        200,
+        300
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "node-leer-estado",
+      "name": "Leer estado",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        400,
+        300
+      ],
+      "alwaysOutputData": true,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT state, context_json FROM agenda.conversation_state WHERE chat_id = $1::bigint;",
+        "options": {
+          "queryReplacement": "={{ $json.callback_query?.message?.chat?.id ?? $json.message?.chat?.id ?? 0 }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "PostgresLemut001",
+          "name": "Postgres Lemut"
+        }
+      }
+    },
+    {
+      "id": "node-leer-citas",
+      "name": "Leer citas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        600,
+        300
+      ],
+      "alwaysOutputData": true,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT to_char(hora_inicio, 'HH24:MI') AS ini, to_char(hora_fin, 'HH24:MI') AS fin FROM agenda.bookings WHERE estado = 'confirmada' AND trabajador = $1 AND fecha = $2::date;",
+        "options": {
+          "queryReplacement": "={{ $('Leer estado').first()?.json?.context_json?.barbero ?? '' }},{{ ($('Entrada').first().json.callback_query?.data ?? '').startsWith('dia|') ? $('Entrada').first().json.callback_query.data.slice(4) : '1970-01-01' }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "PostgresLemut001",
+          "name": "Postgres Lemut"
+        }
+      }
+    },
+    {
+      "id": "node-leer-doc",
+      "name": "Leer doc del negocio",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        800,
+        300
+      ],
+      "parameters": {
+        "operation": "read",
+        "fileSelector": "/knowledge/barberia_ejemplo.md",
+        "options": {}
+      }
+    },
+    {
+      "id": "node-extraer-texto",
+      "name": "Extraer texto",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ],
+      "parameters": {
+        "operation": "text",
+        "options": {}
+      }
+    },
+    {
+      "id": "node-motor",
+      "name": "Motor de agenda",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Motor de la agenda de citas (Fase B): state machine\n//   servicio → barbero → día → hueco\n// Corre dentro del nodo Code \"Motor de agenda\" del workflow Agenda Cliente.\n// Este archivo es la FUENTE; scripts/embed_motor.py lo inyecta en\n// workflows/agenda_cliente.json. Si editas el motor, edita AQUÍ y re-embebe.\n//\n// Entradas (nodos previos del workflow):\n//   $('Entrada')       → update crudo de Telegram (message o callback_query)\n//   $('Leer estado')   → fila de agenda.conversation_state (o item vacío)\n//   $('Leer citas')    → citas confirmadas del barbero/fecha en juego\n//   $('Extraer texto') → texto completo del doc del negocio (knowledge/*.md)\n// Salida: un item { chat_id, payloads: [{method, body}], state_op }\n\nconst upd = $('Entrada').first().json;\nconst estadoRow = $('Leer estado').first()?.json ?? {};\nconst citas = $('Leer citas').all().map(i => i.json).filter(c => c.ini);\nconst doc = $('Extraer texto').first().json.data ?? '';\n\nconst cb = upd.callback_query ?? null;\nconst msg = cb ? cb.message : upd.message;\nconst chatId = msg?.chat?.id;\nconst texto = (upd.message?.text ?? '').trim();\n\n// ---------- parseo del doc ----------\n\n// Servicios: filas de la tabla \"| nombre | 30 min | $180 MXN |\"\nfunction parseServicios(md) {\n  const out = [];\n  for (const linea of md.split('\\n')) {\n    const celdas = linea.split('|').map(c => c.trim());\n    if (celdas.length >= 4 && /^\\d+\\s*min$/.test(celdas[2] ?? '')) {\n      out.push({ nombre: celdas[1], dur: parseInt(celdas[2], 10), precio: celdas[3] });\n    }\n  }\n  return out;\n}\n\n// Horarios: tabla de la sección \"## Horarios por trabajador\", columnas\n// Lunes..Domingo. Devuelve { barbero: { dow: ['10:00','18:00'] | null } }\n// con dow en formato getDay() de JS (0=domingo).\nfunction parseHorarios(md) {\n  const seccion = md.split(/^## Horarios por trabajador$/m)[1]?.split(/^## /m)[0] ?? '';\n  const horarios = {};\n  const mapaDow = [1, 2, 3, 4, 5, 6, 0]; // columnas Lunes..Domingo\n  for (const linea of seccion.split('\\n')) {\n    const celdas = linea.split('|').map(c => c.trim());\n    if (celdas.length < 9 || celdas[1] === 'Barbero' || /^[-\\s:]*$/.test(celdas[1])) continue;\n    const porDia = {};\n    mapaDow.forEach((dow, i) => {\n      const m = (celdas[2 + i] ?? '').match(/(\\d{2}:\\d{2})\\s*[–-]\\s*(\\d{2}:\\d{2})/);\n      porDia[dow] = m ? [m[1], m[2]] : null;\n    });\n    horarios[celdas[1]] = porDia;\n  }\n  return horarios;\n}\n\nconst servicios = parseServicios(doc);\nconst horarios = parseHorarios(doc);\nconst barberos = Object.keys(horarios);\n\n// ---------- utilidades de fecha/hora ----------\n\nconst DIAS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];\nconst MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];\n\nfunction aMin(hhmm) { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; }\nfunction aHHMM(min) {\n  return String(Math.floor(min / 60)).padStart(2, '0') + ':' + String(min % 60).padStart(2, '0');\n}\nfunction fechaISO(d) {\n  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');\n}\nfunction etiquetaDia(d) { return `${DIAS[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]}`; }\nfunction etiquetaISO(iso) { return etiquetaDia(new Date(iso + 'T12:00:00')); }\n\n// Próximos 7 días (hoy incluido) en que trabaja el barbero.\nfunction diasDisponibles(barbero) {\n  const out = [];\n  const hoy = new Date();\n  for (let i = 0; i < 7; i++) {\n    const d = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + i);\n    if (horarios[barbero]?.[d.getDay()]) out.push(d);\n  }\n  return out;\n}\n\n// Huecos: inicios cada 30 min dentro del horario del barbero, que quepan\n// completos antes del cierre y no se encimen con citas confirmadas.\n// Si la fecha es hoy, sólo horarios con al menos 30 min de anticipación.\nfunction calcularHuecos(barbero, fecha, dur) {\n  const d = new Date(fecha + 'T12:00:00');\n  const rango = horarios[barbero]?.[d.getDay()];\n  if (!rango) return [];\n  const [abre, cierra] = rango.map(aMin);\n  const ahora = new Date();\n  const minimo = fechaISO(ahora) === fecha ? ahora.getHours() * 60 + ahora.getMinutes() + 30 : 0;\n  const ocupados = citas.map(c => [aMin(c.ini), aMin(c.fin)]);\n  const out = [];\n  for (let t = abre; t + dur <= cierra; t += 30) {\n    if (t < minimo) continue;\n    if (!ocupados.some(([i, f]) => t < f && t + dur > i)) out.push(aHHMM(t));\n  }\n  return out;\n}\n\n// ---------- teclados inline ----------\n\nfunction tecladoServicios() {\n  return servicios.map((s, i) => [{ text: `${s.nombre} — ${s.precio}`, callback_data: `svc|${i}` }]);\n}\nfunction tecladoBarberos() {\n  return barberos.map((b, i) => [{ text: b, callback_data: `barb|${i}` }]);\n}\nfunction enFilas(botones, porFila) {\n  const filas = [];\n  for (let i = 0; i < botones.length; i += porFila) filas.push(botones.slice(i, i + porFila));\n  return filas;\n}\nfunction tecladoDias(barbero) {\n  return enFilas(diasDisponibles(barbero).map(d =>\n    ({ text: etiquetaDia(d), callback_data: `dia|${fechaISO(d)}` })), 2);\n}\nfunction tecladoHuecos(hs) {\n  return enFilas(hs.map(h => ({ text: h, callback_data: `hueco|${h}` })), 4);\n}\n\n// ---------- state machine ----------\n\nconst payloads = [];\nlet stateOp = { action: 'none', state: '', ctxB64: 'e30=' };\n\nfunction enviar(textoMsg, teclado) {\n  const body = { chat_id: chatId, text: textoMsg };\n  if (teclado) body.reply_markup = { inline_keyboard: teclado };\n  payloads.push({ method: 'sendMessage', body });\n}\nfunction setEstado(state, ctx) {\n  stateOp = { action: 'set', state, ctxB64: Buffer.from(JSON.stringify(ctx)).toString('base64') };\n}\nfunction limpiarEstado() { stateOp = { action: 'clear', state: '', ctxB64: 'e30=' }; }\n\nconst state = estadoRow.state ?? null;\nconst ctx = (estadoRow.context_json && typeof estadoRow.context_json === 'object')\n  ? estadoRow.context_json : {};\n\nif (cb) {\n  // Quitar el \"relojito\" del botón tocado.\n  payloads.push({ method: 'answerCallbackQuery', body: { callback_query_id: cb.id } });\n  const [tipo, valor] = (cb.data ?? '').split('|');\n\n  if (tipo === 'svc' && state === 'servicio' && servicios[+valor]) {\n    const s = servicios[+valor];\n    setEstado('barbero', { ...ctx, servicio: s.nombre, dur: s.dur });\n    enviar(`Va: ${s.nombre} (${s.dur} min).\\n¿Con qué barbero?`, tecladoBarberos());\n  } else if (tipo === 'barb' && state === 'barbero' && barberos[+valor]) {\n    const b = barberos[+valor];\n    setEstado('dia', { ...ctx, barbero: b });\n    enviar(`¿Qué día quieres tu cita con ${b}?`, tecladoDias(b));\n  } else if (tipo === 'dia' && state === 'dia') {\n    const hs = calcularHuecos(ctx.barbero, valor, ctx.dur ?? 30);\n    if (hs.length === 0) {\n      enviar(`El ${etiquetaISO(valor)} ${ctx.barbero} ya no tiene huecos para ${ctx.servicio}. Elige otro día:`, tecladoDias(ctx.barbero));\n    } else {\n      setEstado('hueco', { ...ctx, fecha: valor });\n      enviar(`Horarios libres de ${ctx.barbero} el ${etiquetaISO(valor)} para ${ctx.servicio}:`, tecladoHuecos(hs));\n    }\n  } else if (tipo === 'hueco' && state === 'hueco') {\n    limpiarEstado();\n    enviar(`🚧 Elegiste las ${valor} del ${etiquetaISO(ctx.fecha)} con ${ctx.barbero} — ¡buena elección! La confirmación de la cita (con tu teléfono) se habilita en la siguiente fase, así que aún NO quedó guardada.`);\n  } else {\n    enviar('Ese menú ya venció. Escribe \"agendar\" para empezar de nuevo.');\n  }\n} else if (/^\\/cancelar\\b/i.test(texto)) {\n  limpiarEstado();\n  enviar(state\n    ? 'Listo, cancelé el proceso de agendado. ¿Te ayudo con algo más?'\n    : 'No tenías ningún agendado en curso. ¿Te ayudo con algo más?');\n} else if (!state) {\n  setEstado('servicio', {});\n  enviar('¡Va! Vamos a agendar tu cita. ¿Qué servicio quieres?', tecladoServicios());\n} else {\n  enviar('Estás agendando una cita — elige una opción del último menú que te mandé, o escribe /cancelar para salir.');\n}\n\nreturn [{ json: { chat_id: chatId, payloads, state_op: stateOp } }];\n"
+      }
+    },
+    {
+      "id": "node-guardar-estado",
+      "name": "Guardar estado",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1400,
+        300
+      ],
+      "alwaysOutputData": true,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH del AS (DELETE FROM agenda.conversation_state WHERE chat_id = $1::bigint AND $2 = 'clear') INSERT INTO agenda.conversation_state (chat_id, state, context_json) SELECT $1::bigint, $3, convert_from(decode($4, 'base64'), 'UTF8')::jsonb WHERE $2 = 'set' ON CONFLICT (chat_id) DO UPDATE SET state = EXCLUDED.state, context_json = EXCLUDED.context_json, updated_at = now();",
+        "options": {
+          "queryReplacement": "={{ $json.chat_id }},{{ $json.state_op.action }},{{ $json.state_op.state }},{{ $json.state_op.ctxB64 }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "PostgresLemut001",
+          "name": "Postgres Lemut"
+        }
+      }
+    },
+    {
+      "id": "node-preparar",
+      "name": "Preparar llamadas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Un item por llamada a la API de Telegram que pidió el motor.\nreturn $('Motor de agenda').first().json.payloads.map(p => ({ json: p }));"
+      }
+    },
+    {
+      "id": "node-llamar-telegram",
+      "name": "Llamar Telegram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1800,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://api.telegram.org/bot' + $env.TELEGRAM_BOT_TOKEN + '/' + $json.method }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Entrada": {
+      "main": [
+        [
+          {
+            "node": "Leer estado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer estado": {
+      "main": [
+        [
+          {
+            "node": "Leer citas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer citas": {
+      "main": [
+        [
+          {
+            "node": "Leer doc del negocio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer doc del negocio": {
+      "main": [
+        [
+          {
+            "node": "Extraer texto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraer texto": {
+      "main": [
+        [
+          {
+            "node": "Motor de agenda",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Motor de agenda": {
+      "main": [
+        [
+          {
+            "node": "Guardar estado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar estado": {
+      "main": [
+        [
+          {
+            "node": "Preparar llamadas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar llamadas": {
+      "main": [
+        [
+          {
+            "node": "Llamar Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Mexico_City"
+  }
+}

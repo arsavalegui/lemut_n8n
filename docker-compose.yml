@@ -71,6 +71,10 @@ services:
       # Código que el gerente escribe una vez (/soyadmin CODIGO) para
       # registrarse como admin. El workflow lo lee vía $env.
       ADMIN_SETUP_CODE: ${ADMIN_SETUP_CODE}
+      # El workflow Agenda Cliente manda teclados inline con HTTP Request
+      # directo a la API de Telegram (el nodo Telegram no arma botones
+      # dinámicos); necesita el token vía $env.
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
     ports:
       - "5678:5678"
     volumes:

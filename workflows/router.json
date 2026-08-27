@@ -8,9 +8,9 @@
       "name": "Telegram Trigger",
       "type": "n8n-nodes-base.telegramTrigger",
       "typeVersion": 1.1,
-      "position": [240, 300],
+      "position": [200, 300],
       "parameters": {
-        "updates": ["message"],
+        "updates": ["message", "callback_query"],
         "additionalFields": {}
       },
       "credentials": {
@@ -22,29 +22,117 @@
       "webhookId": "lemut-router-webhook"
     },
     {
-      "id": "node-es-admin-cmd",
-      "name": "¿Comando de admin?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [460, 300],
+      "id": "node-clasificar",
+      "name": "Clasificar mensaje",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 300],
       "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "loose",
-            "version": 2
-          },
-          "combinator": "and",
-          "conditions": [
+        "jsCode": "// Decide a qué workflow va cada update de Telegram.\n// 'pendiente' significa: depende de si el usuario está a media agenda\n// (eso lo resuelve el siguiente nodo consultando conversation_state).\nconst upd = $input.first().json;\nconst text = (upd.message?.text ?? '').trim();\nconst chatId = upd.callback_query?.message?.chat?.id ?? upd.message?.chat?.id ?? 0;\nlet ruta;\nif (upd.callback_query) ruta = 'cliente';\nelse if (/^\\/(soyadmin|hoy|agenda)\\b/.test(text)) ruta = 'admin';\nelse if (/^\\/cancelar\\b/i.test(text)) ruta = 'cliente';\nelse if (/\\b(agend\\w+|citas?|reserv\\w+|apartar?)\\b/i.test(text)) ruta = 'cliente';\nelse ruta = 'pendiente';\nreturn [{ json: { ...upd, _ruta: ruta, _chat_id: chatId } }];"
+      }
+    },
+    {
+      "id": "node-flujo-activo",
+      "name": "¿Flujo activo?",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [600, 300],
+      "alwaysOutputData": true,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT EXISTS(SELECT 1 FROM agenda.conversation_state WHERE chat_id = $1::bigint) AS en_flujo;",
+        "options": {
+          "queryReplacement": "={{ $json._chat_id }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "PostgresLemut001",
+          "name": "Postgres Lemut"
+        }
+      }
+    },
+    {
+      "id": "node-ruta-final",
+      "name": "Ruta final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 300],
+      "parameters": {
+        "jsCode": "// Si la ruta quedó pendiente: con flujo de agenda activo va al workflow\n// de cliente (para que el motor le recuerde que está agendando); si no,\n// al RAG de siempre.\nconst upd = $('Clasificar mensaje').first().json;\nconst enFlujo = $input.first()?.json?.en_flujo === true;\nif (upd._ruta === 'pendiente') upd._ruta = enFlujo ? 'cliente' : 'rag';\nreturn [{ json: upd }];"
+      }
+    },
+    {
+      "id": "node-switch",
+      "name": "¿A dónde?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [1000, 300],
+      "parameters": {
+        "rules": {
+          "values": [
             {
-              "id": "cond-regex-admin",
-              "leftValue": "={{ $json.message?.text ?? '' }}",
-              "rightValue": "^\\/(soyadmin|hoy|agenda)\\b",
-              "operator": {
-                "type": "string",
-                "operation": "regex"
-              }
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "cond-ruta-admin",
+                    "leftValue": "={{ $json._ruta }}",
+                    "rightValue": "admin",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "admin"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "cond-ruta-cliente",
+                    "leftValue": "={{ $json._ruta }}",
+                    "rightValue": "cliente",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "cliente"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "cond-ruta-rag",
+                    "leftValue": "={{ $json._ruta }}",
+                    "rightValue": "rag",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "rag"
             }
           ]
         },
@@ -56,7 +144,7 @@
       "name": "Ir a Agenda Admin",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
-      "position": [700, 200],
+      "position": [1240, 140],
       "parameters": {
         "workflowId": {
           "__rl": true,
@@ -68,11 +156,27 @@
       }
     },
     {
+      "id": "node-a-cliente",
+      "name": "Ir a Agenda Cliente",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [1240, 300],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "LemutAgendaCli01",
+          "mode": "list",
+          "cachedResultName": "Agenda Cliente"
+        },
+        "options": {}
+      }
+    },
+    {
       "id": "node-a-rag",
       "name": "Ir a RAG Chat",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
-      "position": [700, 400],
+      "position": [1240, 460],
       "parameters": {
         "workflowId": {
           "__rl": true,
@@ -86,11 +190,21 @@
   ],
   "connections": {
     "Telegram Trigger": {
-      "main": [[{ "node": "¿Comando de admin?", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "Clasificar mensaje", "type": "main", "index": 0 }]]
     },
-    "¿Comando de admin?": {
+    "Clasificar mensaje": {
+      "main": [[{ "node": "¿Flujo activo?", "type": "main", "index": 0 }]]
+    },
+    "¿Flujo activo?": {
+      "main": [[{ "node": "Ruta final", "type": "main", "index": 0 }]]
+    },
+    "Ruta final": {
+      "main": [[{ "node": "¿A dónde?", "type": "main", "index": 0 }]]
+    },
+    "¿A dónde?": {
       "main": [
         [{ "node": "Ir a Agenda Admin", "type": "main", "index": 0 }],
+        [{ "node": "Ir a Agenda Cliente", "type": "main", "index": 0 }],
         [{ "node": "Ir a RAG Chat", "type": "main", "index": 0 }]
       ]
     }
