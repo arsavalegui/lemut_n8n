@@ -128,7 +128,8 @@ function tecladoHuecos(hs) {
 // ---------- state machine ----------
 
 const payloads = [];
-let stateOp = { action: 'none', state: '', ctxB64: 'e30=' };
+// 'state' nunca viaja vacío: n8n descarta parámetros '' en queryReplacement.
+let stateOp = { action: 'none', state: '-', ctxB64: 'e30=' };
 
 function enviar(textoMsg, teclado) {
   const body = { chat_id: chatId, text: textoMsg };
@@ -138,7 +139,7 @@ function enviar(textoMsg, teclado) {
 function setEstado(state, ctx) {
   stateOp = { action: 'set', state, ctxB64: Buffer.from(JSON.stringify(ctx)).toString('base64') };
 }
-function limpiarEstado() { stateOp = { action: 'clear', state: '', ctxB64: 'e30=' }; }
+function limpiarEstado() { stateOp = { action: 'clear', state: '-', ctxB64: 'e30=' }; }
 
 const state = estadoRow.state ?? null;
 const ctx = (estadoRow.context_json && typeof estadoRow.context_json === 'object')

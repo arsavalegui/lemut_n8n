@@ -54,9 +54,12 @@ workflow = {
                 "operation": "executeQuery",
                 # Solo aporta datos reales en el paso dia|; en los demás pasos
                 # los parámetros dummy regresan cero filas y no estorban.
+                # Ojo: n8n descarta parámetros que evalúan a cadena vacía
+                # (truena con "there is no parameter $N"), por eso el
+                # barbero ausente viaja como '-' y no como ''.
                 "query": "SELECT to_char(hora_inicio, 'HH24:MI') AS ini, to_char(hora_fin, 'HH24:MI') AS fin FROM agenda.bookings WHERE estado = 'confirmada' AND trabajador = $1 AND fecha = $2::date;",
                 "options": {
-                    "queryReplacement": "={{ $('Leer estado').first()?.json?.context_json?.barbero ?? '' }},{{ ($('Entrada').first().json.callback_query?.data ?? '').startsWith('dia|') ? $('Entrada').first().json.callback_query.data.slice(4) : '1970-01-01' }}"
+                    "queryReplacement": "={{ $('Leer estado').first()?.json?.context_json?.barbero || '-' }},{{ ($('Entrada').first().json.callback_query?.data ?? '').startsWith('dia|') ? $('Entrada').first().json.callback_query.data.slice(4) : '1970-01-01' }}"
                 },
             },
             "credentials": {"postgres": POSTGRES_CRED},
