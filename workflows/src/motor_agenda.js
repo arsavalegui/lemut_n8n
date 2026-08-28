@@ -184,8 +184,10 @@ if (cb) {
       enviar(`Horarios libres de ${ctx.barbero} el ${etiquetaISO(valor)} para ${ctx.servicio}:`, tecladoHuecos(hs));
     }
   } else if (tipo === 'hueco' && state === 'hueco') {
-    setEstado('telefono', { ...ctx, hora: valor });
-    enviar(`Casi listo 🙌\n\n💈 ${ctx.servicio}\n👤 ${ctx.barbero}\n📆 ${etiquetaISO(ctx.fecha)} a las ${valor}\n\nPara confirmar tu cita, comparte tu teléfono con el botón de aquí abajo 👇`, 'contacto');
+    // El nombre se pregunta aparte porque en Telegram mucha gente usa
+    // apodos; el negocio necesita el nombre real de quien llega.
+    setEstado('nombre', { ...ctx, hora: valor });
+    enviar(`Va quedando 📝\n\n💈 ${ctx.servicio}\n👤 ${ctx.barbero}\n📆 ${etiquetaISO(ctx.fecha)} a las ${valor}\n\n¿A nombre de quién agendo la cita? Escríbeme el nombre completo.`);
   } else {
     enviar('Ese menú ya venció. Escribe "agendar" para empezar de nuevo.');
   }
@@ -194,14 +196,23 @@ if (cb) {
   enviar(state
     ? 'Listo, cancelé el proceso de agendado. ¿Te ayudo con algo más?'
     : 'No tenías ningún agendado en curso. ¿Te ayudo con algo más?', 'quitar');
+} else if (state === 'nombre') {
+  const nombre = texto.replace(/\s+/g, ' ').trim();
+  if (nombre.length < 3 || nombre.length > 60 || nombre.startsWith('/')
+      || !/[a-záéíóúñü]/i.test(nombre)) {
+    enviar('Mmm, eso no parece un nombre 🤔 Escríbeme el nombre completo de quien viene a la cita (por ejemplo: "Juan Pérez").');
+  } else {
+    setEstado('telefono', { ...ctx, nombre });
+    enviar(`¡Gracias, ${nombre}! Ahora comparte tu teléfono con el botón de aquí abajo para confirmar tu cita 👇`, 'contacto');
+  }
 } else if (upd.message?.contact && state === 'telefono') {
   const contacto = upd.message.contact;
   if (contacto.user_id && upd.message.from?.id && contacto.user_id !== upd.message.from.id) {
     // Contacto reenviado de otra persona: el teléfono debe ser del propio cliente.
     enviar('Ese contacto no es tuyo 🤔 — usa el botón "📱 Compartir mi teléfono" para mandar tu propio número.', 'contacto');
   } else {
-    const nombre = [contacto.first_name, contacto.last_name].filter(Boolean).join(' ')
-      || [upd.message.from?.first_name, upd.message.from?.last_name].filter(Boolean).join(' ')
+    const nombre = ctx.nombre
+      || [contacto.first_name, contacto.last_name].filter(Boolean).join(' ')
       || 'Cliente';
     booking = {
       action: 'book',

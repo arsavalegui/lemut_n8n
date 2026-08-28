@@ -95,14 +95,18 @@ paso("elijo Diego Torres (barb|1)", upd_callback("barb|1"),
 textos = paso(f"elijo el {ETIQ_DIA} {DIA}", upd_callback(f"dia|{DIA}"),
               esperado=["Horarios libres", "hueco|13:00"],
               no_esperado=["hueco|11:00"])  # Diego entra a las 12:00
-paso("elijo las 13:00", upd_callback("hueco|13:00"),
-     esperado=["comparte tu teléfono"])
-paso("comparto mi contacto → cita + noti al gerente", upd_contact(TEL_PRUEBA),
-     esperado=["Cita confirmada", "Nueva cita agendada", TEL_PRUEBA])
+paso("elijo las 13:00 → debe pedir el nombre", upd_callback("hueco|13:00"),
+     esperado=["nombre de quién"])
+paso("mando un nombre chafa ('123')", upd_texto("123"),
+     esperado=["no parece un nombre"])
+paso("mando el nombre real", upd_texto("Arturo Aragón Prueba"),
+     esperado=["Gracias, Arturo Aragón Prueba", "comparte tu teléfono"])
+paso("comparto mi contacto → cita + noti al gerente con el nombre real", upd_contact(TEL_PRUEBA),
+     esperado=["Cita confirmada, Arturo Aragón Prueba", "Nueva cita agendada", "Arturo Aragón Prueba", TEL_PRUEBA])
 
 # --- Admin: la cita aparece ---
-paso("/agenda (todas las próximas)", upd_texto("/agenda"),
-     esperado=["Diego Torres", "13:00", "Richer"])
+paso("/agenda (la cita sale con el nombre real, no el de Telegram)", upd_texto("/agenda"),
+     esperado=["Diego Torres", "13:00", "Arturo Aragón Prueba"])
 paso("/agenda Diego (filtrada)", upd_texto("/agenda Diego"),
      esperado=["Diego Torres"])
 paso("/agenda Luis (sin citas)", upd_texto("/agenda Luis"),
@@ -116,6 +120,8 @@ paso("mismo barbero (barb|1)", upd_callback("barb|1"), esperado=["Qué día"])
 paso(f"mismo día: las 13:00 ya NO deben ofrecerse", upd_callback(f"dia|{DIA}"),
      esperado=["Horarios libres"], no_esperado=["hueco|13:00"])
 paso("fuerzo tap en botón viejo de las 13:00 (carrera)", upd_callback("hueco|13:00"),
+     esperado=["nombre de quién"])
+paso("doy nombre en la carrera", upd_texto("Cliente Carrera"),
      esperado=["comparte tu teléfono"])
 paso("comparto contacto → debe rechazar por hueco ocupado", upd_contact(TEL_PRUEBA),
      esperado=["se acaba de ocupar"], no_esperado=["Cita confirmada"])
