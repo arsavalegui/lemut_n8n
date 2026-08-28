@@ -191,7 +191,7 @@ workflow = {
                     "  } else {\n"
                     "    payloads.push({ method: 'sendMessage', body: {\n"
                     "      chat_id: m.chat_id,\n"
-                    "      text: 'Esa cita ya no se pudo cancelar (quizá ya pasó o ya estaba cancelada). Escribe /miscitas para ver tus citas vigentes.',\n"
+                    "      text: 'Esa cita ya no se pudo cancelar (quizá ya pasó o ya estaba cancelada). Escribe mis citas para ver tus citas vigentes.',\n"
                     "    } });\n"
                     "  }\n"
                     "  return [{ json: { chat_id: m.chat_id, payloads, state_op: m.state_op } }];\n"

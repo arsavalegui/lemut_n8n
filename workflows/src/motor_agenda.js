@@ -205,7 +205,13 @@ if (cb) {
   } else {
     enviar('Ese menú ya venció. Escribe "agendar" para empezar de nuevo.');
   }
-} else if (/^\/miscitas\b/i.test(texto)) {
+} else if ((/^\/?miscitas\b/i.test(texto)
+    || /\bmis?\s+citas?\b/i.test(texto)
+    || /\bcitas?\s+(tengo|agendadas?)\b/i.test(texto)
+    || /\bcu[aá]ndo\s+es\s+mi\s+cita\b/i.test(texto))
+    && !/(agend|reserv|apart)/i.test(texto)) {
+  // Consultar citas en lenguaje natural ("mis citas", "qué citas tengo").
+  // Si trae verbo de agendar ("quiero agendar mi cita"), gana el agendado.
   const mias = $('Leer mis citas').all().map(i => i.json).filter(c => c.id !== undefined);
   if (mias.length === 0) {
     enviar('No tienes citas próximas. Escribe "agendar" si quieres apartar una.');

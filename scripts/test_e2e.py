@@ -153,7 +153,7 @@ paso("después de cancelar, el RAG vuelve a responder", upd_texto("¿a qué hora
 
 # --- Fase E: /miscitas y cancelación por cliente ---
 import re
-textos = paso("/miscitas (debe listar mi cita con botón de cancelar)", upd_texto("/miscitas"),
+textos = paso("escribo 'ver mis citas' natural (lista con botón de cancelar)", upd_texto("ver mis citas"),
               esperado=["Tus próximas citas", "13:00", "cxl|"])
 m = re.search(r"cxl\|(\d+)", textos)
 if m:
@@ -165,7 +165,7 @@ else:
     fallos.append("no encontré botón cxl| para cancelar")
 # Ojo: el chat es el del usuario real y puede tener citas propias ajenas
 # a la suite — validamos que la cancelada desapareció, no que no haya nada.
-paso("/miscitas ya no lista la cita cancelada", upd_texto("/miscitas"),
+paso("'qué citas tengo' ya no lista la cancelada", upd_texto("qué citas tengo"),
      no_esperado=[f"cxl|{m.group(1)}" if m else "13:00 — Corte de cabello (clásico"])
 paso("/agenda del admin ya no muestra la cita cancelada", upd_texto("/agenda"),
      no_esperado=["Arturo Aragón Prueba"])
