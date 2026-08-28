@@ -55,9 +55,20 @@ function parseHorarios(md) {
   return horarios;
 }
 
+// Políticas clave de la sección "## Políticas" del doc: puntualidad y
+// cancelación. Se recuerdan al confirmar una cita, porque nadie las
+// pregunta hasta que ya es tarde.
+function parsePoliticas(md) {
+  const seccion = md.split(/^## Políticas$/m)[1]?.split(/^## /m)[0] ?? '';
+  return seccion.split('\n')
+    .filter(l => /^\s*-\s/.test(l) && /(puntualidad|tarde|toleranc|cancelaci)/i.test(l))
+    .map(l => l.replace(/^\s*-\s*/, '').replace(/\*\*/g, '').trim());
+}
+
 const servicios = parseServicios(doc);
 const horarios = parseHorarios(doc);
 const barberos = Object.keys(horarios);
+const politicasClave = parsePoliticas(doc);
 
 // ---------- utilidades de fecha/hora ----------
 
@@ -258,6 +269,7 @@ if (cb) {
       telefono: contacto.phone_number ?? '-',
       cliente_chat_id: chatId,
       fechaEtiqueta: etiquetaISO(ctx.fecha),
+      politicas: politicasClave,
     };
     // Los mensajes y la limpieza de estado los decide "Resolver reserva"
     // según el resultado del INSERT (hueco libre vs recién ocupado).

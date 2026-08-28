@@ -110,8 +110,9 @@ paso("mando un nombre chafa ('123')", upd_texto("123"),
      esperado=["no parece un nombre"])
 paso("mando el nombre real", upd_texto("Arturo Aragón Prueba"),
      esperado=["Gracias, Arturo Aragón Prueba", "comparte tu teléfono"])
-paso("comparto mi contacto → cita + noti al gerente con el nombre real", upd_contact(TEL_PRUEBA),
-     esperado=["Cita confirmada, Arturo Aragón Prueba", "Nueva cita agendada", "Arturo Aragón Prueba", TEL_PRUEBA])
+paso("comparto mi contacto → cita + noti + recordatorio de políticas", upd_contact(TEL_PRUEBA),
+     esperado=["Cita confirmada, Arturo Aragón Prueba", "Toma en cuenta", "15 minutos", "anticipación",
+               "mis citas", "Nueva cita agendada", TEL_PRUEBA])
 
 # --- Admin: la cita aparece ---
 paso("/agenda (la cita sale con el nombre real, no el de Telegram)", upd_texto("/agenda"),
