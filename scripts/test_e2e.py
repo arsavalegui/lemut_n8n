@@ -136,6 +136,25 @@ paso("/cancelar", upd_texto("/cancelar"),
 paso("después de cancelar, el RAG vuelve a responder", upd_texto("¿a qué hora abren los sábados?"),
      esperado=["9"])
 
+# --- Fase E: /miscitas y cancelación por cliente ---
+import re
+textos = paso("/miscitas (debe listar mi cita con botón de cancelar)", upd_texto("/miscitas"),
+              esperado=["Tus próximas citas", "13:00", "cxl|"])
+m = re.search(r"cxl\|(\d+)", textos)
+if m:
+    paso("cancelo mi cita → aviso a mí y al gerente", upd_callback(f"cxl|{m.group(1)}"),
+         esperado=["cancelé tu cita", "Cita cancelada por el cliente", "Arturo Aragón Prueba"])
+    paso("tap repetido en el mismo botón → ya no se puede", upd_callback(f"cxl|{m.group(1)}"),
+         esperado=["ya no se pudo cancelar"])
+else:
+    fallos.append("no encontré botón cxl| para cancelar")
+# Ojo: el chat es el del usuario real y puede tener citas propias ajenas
+# a la suite — validamos que la cancelada desapareció, no que no haya nada.
+paso("/miscitas ya no lista la cita cancelada", upd_texto("/miscitas"),
+     no_esperado=[f"cxl|{m.group(1)}" if m else "13:00 — Corte de cabello (clásico"])
+paso("/agenda del admin ya no muestra la cita cancelada", upd_texto("/agenda"),
+     no_esperado=["Arturo Aragón Prueba"])
+
 print("\n" + "═" * 50)
 if fallos:
     print(f"❌ {len(fallos)} FALLOS de {paso_n} pasos:")

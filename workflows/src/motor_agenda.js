@@ -139,6 +139,9 @@ let booking = {
   fecha: '1970-01-01', ini: '00:00', fin: '00:00',
   nombreB64: 'LQ==', telefono: '-', cliente_chat_id: 0, fechaEtiqueta: '-',
 };
+// Cancelación de cita (Fase E). El UPDATE lo hace el nodo "Cancelar cita"
+// (gateado por action='cancel') y Resolver arma los mensajes.
+let cancelOp = { action: 'none', id: 0 };
 
 function enviar(textoMsg, teclado) {
   const body = { chat_id: chatId, text: textoMsg };
@@ -188,8 +191,24 @@ if (cb) {
     // apodos; el negocio necesita el nombre real de quien llega.
     setEstado('nombre', { ...ctx, hora: valor });
     enviar(`Va quedando 📝\n\n💈 ${ctx.servicio}\n👤 ${ctx.barbero}\n📆 ${etiquetaISO(ctx.fecha)} a las ${valor}\n\n¿A nombre de quién agendo la cita? Escríbeme el nombre completo.`);
+  } else if (tipo === 'cxl') {
+    // Cancelar una cita desde /miscitas. Funciona en cualquier estado;
+    // la validación (que sea suya, futura y confirmada) va en el SQL.
+    cancelOp = { action: 'cancel', id: parseInt(valor, 10) || 0 };
   } else {
     enviar('Ese menú ya venció. Escribe "agendar" para empezar de nuevo.');
+  }
+} else if (/^\/miscitas\b/i.test(texto)) {
+  const mias = $('Leer mis citas').all().map(i => i.json).filter(c => c.id !== undefined);
+  if (mias.length === 0) {
+    enviar('No tienes citas próximas. Escribe "agendar" si quieres apartar una. ✂️');
+  } else {
+    const lineas = mias.map(c => `• ${etiquetaISO(c.fecha_iso)} ${c.ini} — ${c.servicio} con ${c.trabajador}`);
+    const botones = mias.map(c => [{
+      text: `❌ Cancelar ${etiquetaISO(c.fecha_iso)} ${c.ini}`,
+      callback_data: `cxl|${c.id}`,
+    }]);
+    enviar(`Tus próximas citas:\n\n${lineas.join('\n')}\n\nSi necesitas cancelar alguna, usa los botones:`, botones);
   }
 } else if (/^\/cancelar\b/i.test(texto)) {
   limpiarEstado();
@@ -239,4 +258,4 @@ if (cb) {
   enviar('Estás agendando una cita — elige una opción del último menú que te mandé, o escribe /cancelar para salir.');
 }
 
-return [{ json: { chat_id: chatId, payloads, state_op: stateOp, booking } }];
+return [{ json: { chat_id: chatId, payloads, state_op: stateOp, booking, cancel_op: cancelOp } }];

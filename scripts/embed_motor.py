@@ -44,6 +44,23 @@ workflow = {
             "credentials": {"postgres": POSTGRES_CRED},
         },
         {
+            "id": "node-leer-mis-citas",
+            "name": "Leer mis citas",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.5,
+            "position": [500, 140],
+            "alwaysOutputData": True,
+            "parameters": {
+                "operation": "executeQuery",
+                # Citas futuras confirmadas del chat, para /miscitas.
+                "query": "SELECT id, trabajador, servicio, to_char(fecha, 'YYYY-MM-DD') AS fecha_iso, to_char(hora_inicio, 'HH24:MI') AS ini FROM agenda.bookings WHERE cliente_chat_id = $1::bigint AND estado = 'confirmada' AND (fecha > (now() AT TIME ZONE 'America/Mexico_City')::date OR (fecha = (now() AT TIME ZONE 'America/Mexico_City')::date AND hora_inicio > (now() AT TIME ZONE 'America/Mexico_City')::time)) ORDER BY fecha, hora_inicio LIMIT 10;",
+                "options": {
+                    "queryReplacement": "={{ $('Entrada').first().json.callback_query?.message?.chat?.id ?? $('Entrada').first().json.message?.chat?.id ?? 0 }}"
+                },
+            },
+            "credentials": {"postgres": POSTGRES_CRED},
+        },
+        {
             "id": "node-leer-citas",
             "name": "Leer citas",
             "type": "n8n-nodes-base.postgres",
@@ -112,6 +129,24 @@ workflow = {
             "credentials": {"postgres": POSTGRES_CRED},
         },
         {
+            "id": "node-cancelar-cita",
+            "name": "Cancelar cita",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.5,
+            "position": [1400, 60],
+            "alwaysOutputData": True,
+            "parameters": {
+                "operation": "executeQuery",
+                # UPDATE gateado: solo cancela citas del propio chat, futuras
+                # y confirmadas (un cxl|id ajeno o viejo no hace nada).
+                "query": "UPDATE agenda.bookings SET estado = 'cancelada' WHERE $1 = 'cancel' AND id = $2::int AND cliente_chat_id = $3::bigint AND estado = 'confirmada' AND (fecha > (now() AT TIME ZONE 'America/Mexico_City')::date OR (fecha = (now() AT TIME ZONE 'America/Mexico_City')::date AND hora_inicio > (now() AT TIME ZONE 'America/Mexico_City')::time)) RETURNING id, trabajador, servicio, to_char(fecha, 'DD/MM') AS fecha_fmt, to_char(hora_inicio, 'HH24:MI') AS ini, cliente_nombre, cliente_telefono;",
+                "options": {
+                    "queryReplacement": "={{ $('Motor de agenda').first().json.cancel_op.action }},{{ $('Motor de agenda').first().json.cancel_op.id }},{{ $('Motor de agenda').first().json.chat_id }}"
+                },
+            },
+            "credentials": {"postgres": POSTGRES_CRED},
+        },
+        {
             "id": "node-leer-admins",
             "name": "Leer admins",
             "type": "n8n-nodes-base.postgres",
@@ -133,10 +168,34 @@ workflow = {
             "position": [1560, 300],
             "parameters": {
                 "jsCode": (
-                    "// Si el motor pidió reservar, arma los mensajes según el resultado\n"
-                    "// del INSERT: confirmación al cliente + aviso a cada admin, o el\n"
-                    "// mensaje de hueco recién ocupado. Si no hubo reserva, passthrough.\n"
+                    "// Si el motor pidió reservar o cancelar, arma los mensajes según el\n"
+                    "// resultado del INSERT/UPDATE: confirmación al cliente + aviso a cada\n"
+                    "// admin. Si no hubo operación de BD, passthrough.\n"
                     "const m = $('Motor de agenda').first().json;\n"
+                    "if (m.cancel_op?.action === 'cancel') {\n"
+                    "  const canceladas = $('Cancelar cita').all().map(i => i.json).filter(r => r.id !== undefined);\n"
+                    "  const admins = $('Leer admins').all().map(i => i.json).filter(a => a.chat_id);\n"
+                    "  const payloads = [...m.payloads];\n"
+                    "  if (canceladas.length > 0) {\n"
+                    "    const c = canceladas[0];\n"
+                    "    payloads.push({ method: 'sendMessage', body: {\n"
+                    "      chat_id: m.chat_id,\n"
+                    "      text: `✅ Listo: cancelé tu cita del ${c.fecha_fmt} a las ${c.ini} (${c.servicio} con ${c.trabajador}). Si quieres apartar otra, escribe \"agendar\".`,\n"
+                    "    } });\n"
+                    "    for (const a of admins) {\n"
+                    "      payloads.push({ method: 'sendMessage', body: {\n"
+                    "        chat_id: a.chat_id,\n"
+                    "        text: `❌ Cita cancelada por el cliente\\n\\n${c.fecha_fmt} · ${c.ini}\\n💈 ${c.servicio}\\n👤 Barbero: ${c.trabajador}\\nCliente: ${c.cliente_nombre} · ${c.cliente_telefono}`,\n"
+                    "      } });\n"
+                    "    }\n"
+                    "  } else {\n"
+                    "    payloads.push({ method: 'sendMessage', body: {\n"
+                    "      chat_id: m.chat_id,\n"
+                    "      text: 'Esa cita ya no se pudo cancelar (quizá ya pasó o ya estaba cancelada). Escribe /miscitas para ver tus citas vigentes.',\n"
+                    "    } });\n"
+                    "  }\n"
+                    "  return [{ json: { chat_id: m.chat_id, payloads, state_op: m.state_op } }];\n"
+                    "}\n"
                     "if (m.booking.action !== 'book') {\n"
                     "  return [{ json: { chat_id: m.chat_id, payloads: m.payloads, state_op: m.state_op } }];\n"
                     "}\n"
@@ -217,12 +276,14 @@ workflow = {
     ],
     "connections": {
         "Entrada": {"main": [[{"node": "Leer estado", "type": "main", "index": 0}]]},
-        "Leer estado": {"main": [[{"node": "Leer citas", "type": "main", "index": 0}]]},
+        "Leer estado": {"main": [[{"node": "Leer mis citas", "type": "main", "index": 0}]]},
+        "Leer mis citas": {"main": [[{"node": "Leer citas", "type": "main", "index": 0}]]},
         "Leer citas": {"main": [[{"node": "Leer doc del negocio", "type": "main", "index": 0}]]},
         "Leer doc del negocio": {"main": [[{"node": "Extraer texto", "type": "main", "index": 0}]]},
         "Extraer texto": {"main": [[{"node": "Motor de agenda", "type": "main", "index": 0}]]},
         "Motor de agenda": {"main": [[{"node": "Insertar cita", "type": "main", "index": 0}]]},
-        "Insertar cita": {"main": [[{"node": "Leer admins", "type": "main", "index": 0}]]},
+        "Insertar cita": {"main": [[{"node": "Cancelar cita", "type": "main", "index": 0}]]},
+        "Cancelar cita": {"main": [[{"node": "Leer admins", "type": "main", "index": 0}]]},
         "Leer admins": {"main": [[{"node": "Resolver reserva", "type": "main", "index": 0}]]},
         "Resolver reserva": {"main": [[{"node": "Guardar estado", "type": "main", "index": 0}]]},
         "Guardar estado": {"main": [[{"node": "Preparar llamadas", "type": "main", "index": 0}]]},

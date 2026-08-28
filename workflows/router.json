@@ -8,9 +8,15 @@
       "name": "Telegram Trigger",
       "type": "n8n-nodes-base.telegramTrigger",
       "typeVersion": 1.1,
-      "position": [200, 300],
+      "position": [
+        200,
+        300
+      ],
       "parameters": {
-        "updates": ["message", "callback_query"],
+        "updates": [
+          "message",
+          "callback_query"
+        ],
         "additionalFields": {}
       },
       "credentials": {
@@ -26,9 +32,12 @@
       "name": "Clasificar mensaje",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [400, 300],
+      "position": [
+        400,
+        300
+      ],
       "parameters": {
-        "jsCode": "// Decide a qué workflow va cada update de Telegram.\n// 'pendiente' significa: depende de si el usuario está a media agenda\n// (eso lo resuelve el siguiente nodo consultando conversation_state).\nconst upd = $input.first().json;\nconst text = (upd.message?.text ?? '').trim();\nconst chatId = upd.callback_query?.message?.chat?.id ?? upd.message?.chat?.id ?? 0;\nlet ruta;\nif (upd.callback_query) ruta = 'cliente';\nelse if (/^\\/(soyadmin|hoy|agenda)\\b/.test(text)) ruta = 'admin';\nelse if (/^\\/cancelar\\b/i.test(text)) ruta = 'cliente';\nelse if (/\\b(agend\\w+|citas?|reserv\\w+|apartar?)\\b/i.test(text)) ruta = 'cliente';\nelse ruta = 'pendiente';\nreturn [{ json: { ...upd, _ruta: ruta, _chat_id: chatId } }];"
+        "jsCode": "// Decide a qué workflow va cada update de Telegram.\n// 'pendiente' significa: depende de si el usuario está a media agenda\n// (eso lo resuelve el siguiente nodo consultando conversation_state).\nconst upd = $input.first().json;\nconst text = (upd.message?.text ?? '').trim();\nconst chatId = upd.callback_query?.message?.chat?.id ?? upd.message?.chat?.id ?? 0;\nlet ruta;\nif (upd.callback_query) ruta = 'cliente';\nelse if (/^\\/(soyadmin|hoy|agenda)\\b/.test(text)) ruta = 'admin';\nelse if (/^\\/(cancelar|miscitas)\\b/i.test(text)) ruta = 'cliente';\nelse if (/\\b(agend\\w+|citas?|reserv\\w+|apartar?)\\b/i.test(text)) ruta = 'cliente';\nelse ruta = 'pendiente';\nreturn [{ json: { ...upd, _ruta: ruta, _chat_id: chatId } }];"
       }
     },
     {
@@ -36,7 +45,10 @@
       "name": "¿Flujo activo?",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [600, 300],
+      "position": [
+        600,
+        300
+      ],
       "alwaysOutputData": true,
       "parameters": {
         "operation": "executeQuery",
@@ -57,7 +69,10 @@
       "name": "Ruta final",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [800, 300],
+      "position": [
+        800,
+        300
+      ],
       "parameters": {
         "jsCode": "// Si la ruta quedó pendiente: con flujo de agenda activo va al workflow\n// de cliente (para que el motor le recuerde que está agendando); si no,\n// al RAG de siempre.\nconst upd = $('Clasificar mensaje').first().json;\nconst enFlujo = $input.first()?.json?.en_flujo === true;\nif (upd._ruta === 'pendiente') upd._ruta = enFlujo ? 'cliente' : 'rag';\nreturn [{ json: upd }];"
       }
@@ -67,7 +82,10 @@
       "name": "¿A dónde?",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
-      "position": [1000, 300],
+      "position": [
+        1000,
+        300
+      ],
       "parameters": {
         "rules": {
           "values": [
@@ -85,7 +103,10 @@
                     "id": "cond-ruta-admin",
                     "leftValue": "={{ $json._ruta }}",
                     "rightValue": "admin",
-                    "operator": { "type": "string", "operation": "equals" }
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
                   }
                 ]
               },
@@ -106,7 +127,10 @@
                     "id": "cond-ruta-cliente",
                     "leftValue": "={{ $json._ruta }}",
                     "rightValue": "cliente",
-                    "operator": { "type": "string", "operation": "equals" }
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
                   }
                 ]
               },
@@ -127,7 +151,10 @@
                     "id": "cond-ruta-rag",
                     "leftValue": "={{ $json._ruta }}",
                     "rightValue": "rag",
-                    "operator": { "type": "string", "operation": "equals" }
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
                   }
                 ]
               },
@@ -144,7 +171,10 @@
       "name": "Ir a Agenda Admin",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
-      "position": [1240, 140],
+      "position": [
+        1240,
+        140
+      ],
       "parameters": {
         "workflowId": {
           "__rl": true,
@@ -160,7 +190,10 @@
       "name": "Ir a Agenda Cliente",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
-      "position": [1240, 300],
+      "position": [
+        1240,
+        300
+      ],
       "parameters": {
         "workflowId": {
           "__rl": true,
@@ -176,7 +209,10 @@
       "name": "Ir a RAG Chat",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
-      "position": [1240, 460],
+      "position": [
+        1240,
+        460
+      ],
       "parameters": {
         "workflowId": {
           "__rl": true,
@@ -190,22 +226,72 @@
   ],
   "connections": {
     "Telegram Trigger": {
-      "main": [[{ "node": "Clasificar mensaje", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Clasificar mensaje",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Clasificar mensaje": {
-      "main": [[{ "node": "¿Flujo activo?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "¿Flujo activo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "¿Flujo activo?": {
-      "main": [[{ "node": "Ruta final", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Ruta final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Ruta final": {
-      "main": [[{ "node": "¿A dónde?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "¿A dónde?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "¿A dónde?": {
       "main": [
-        [{ "node": "Ir a Agenda Admin", "type": "main", "index": 0 }],
-        [{ "node": "Ir a Agenda Cliente", "type": "main", "index": 0 }],
-        [{ "node": "Ir a RAG Chat", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Ir a Agenda Admin",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ir a Agenda Cliente",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ir a RAG Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
