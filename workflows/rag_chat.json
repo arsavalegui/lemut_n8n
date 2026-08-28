@@ -68,22 +68,26 @@
       }
     },
     {
-      "id": "node-gemini",
-      "name": "Google Gemini Chat Model",
-      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
-      "typeVersion": 1,
+      "id": "node-omniroute",
+      "name": "OmniRoute Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
       "position": [
         800,
         520
       ],
       "parameters": {
-        "modelName": "models/gemini-2.5-flash-lite",
+        "model": {
+          "__rl": true,
+          "value": "auto/best-chat",
+          "mode": "id"
+        },
         "options": {}
       },
       "credentials": {
-        "googlePalmApi": {
-          "id": "gemini-lemut-cred",
-          "name": "Gemini Lemut"
+        "openAiApi": {
+          "id": "OmniRouteLocal01",
+          "name": "OmniRoute local"
         }
       }
     },
@@ -187,7 +191,7 @@
         ]
       ]
     },
-    "Google Gemini Chat Model": {
+    "OmniRoute Chat Model": {
       "ai_languageModel": [
         [
           {

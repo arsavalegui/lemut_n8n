@@ -43,6 +43,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # El LLM del bot es OmniRoute, que corre en el HOST (servicio systemd
+    # de usuario "omniroute", puerto 20128). host-gateway permite que el
+    # contenedor lo alcance como host.docker.internal.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     # Las vars de WEBHOOK_URL / N8N_HOST vienen de .tunnel.env, que
     # genera el script up.sh leyendo la URL del log de cloudflared.
     env_file:
