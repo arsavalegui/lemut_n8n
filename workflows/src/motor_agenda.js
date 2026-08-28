@@ -124,6 +124,10 @@ function tecladoDias(barbero) {
 function tecladoHuecos(hs) {
   return enFilas(hs.map(h => ({ text: h, callback_data: `hueco|${h}` })), 4);
 }
+// Última fila de todo menú del flujo: salida sin fricción.
+function conCancelar(filas) {
+  return [...filas, [{ text: 'Cancelar', callback_data: 'abort|1' }]];
+}
 
 // ---------- state machine ----------
 
@@ -147,7 +151,7 @@ function enviar(textoMsg, teclado) {
   const body = { chat_id: chatId, text: textoMsg };
   if (Array.isArray(teclado)) body.reply_markup = { inline_keyboard: teclado };
   else if (teclado === 'contacto') body.reply_markup = {
-    keyboard: [[{ text: '📱 Compartir mi teléfono', request_contact: true }]],
+    keyboard: [[{ text: 'Compartir mi teléfono', request_contact: true }], [{ text: 'Cancelar' }]],
     one_time_keyboard: true, resize_keyboard: true,
   };
   else if (teclado === 'quitar') body.reply_markup = { remove_keyboard: true };
@@ -170,27 +174,30 @@ if (cb) {
   if (tipo === 'svc' && state === 'servicio' && servicios[+valor]) {
     const s = servicios[+valor];
     setEstado('barbero', { ...ctx, servicio: s.nombre, dur: s.dur });
-    enviar(`Va: ${s.nombre} (${s.dur} min).\n¿Con qué barbero?`, tecladoBarberos());
+    enviar(`Va: ${s.nombre} (${s.dur} min). ¿Con qué barbero?`, conCancelar(tecladoBarberos()));
   } else if (tipo === 'barb' && state === 'barbero' && barberos[+valor]) {
     const b = barberos[+valor];
     setEstado('dia', { ...ctx, barbero: b });
-    enviar(`¿Qué día quieres tu cita con ${b}?`, tecladoDias(b));
+    enviar(`¿Qué día quieres tu cita con ${b}?`, conCancelar(tecladoDias(b)));
   } else if (tipo === 'dia' && state === 'dia' && !diasDisponibles(ctx.barbero).map(fechaISO).includes(valor)) {
     // Botón de un día que ya salió de la ventana de 7 días (o data inventada).
-    enviar(`Ese día ya no está disponible. Elige uno de estos:`, tecladoDias(ctx.barbero));
+    enviar(`Ese día ya no está disponible. Elige uno de estos:`, conCancelar(tecladoDias(ctx.barbero)));
   } else if (tipo === 'dia' && state === 'dia') {
     const hs = calcularHuecos(ctx.barbero, valor, ctx.dur ?? 30);
     if (hs.length === 0) {
-      enviar(`El ${etiquetaISO(valor)} ${ctx.barbero} ya no tiene huecos para ${ctx.servicio}. Elige otro día:`, tecladoDias(ctx.barbero));
+      enviar(`El ${etiquetaISO(valor)} ${ctx.barbero} ya no tiene huecos para ${ctx.servicio}. Elige otro día:`, conCancelar(tecladoDias(ctx.barbero)));
     } else {
       setEstado('hueco', { ...ctx, fecha: valor });
-      enviar(`Horarios libres de ${ctx.barbero} el ${etiquetaISO(valor)} para ${ctx.servicio}:`, tecladoHuecos(hs));
+      enviar(`Horarios libres de ${ctx.barbero} el ${etiquetaISO(valor)} para ${ctx.servicio}:`, conCancelar(tecladoHuecos(hs)));
     }
   } else if (tipo === 'hueco' && state === 'hueco') {
     // El nombre se pregunta aparte porque en Telegram mucha gente usa
     // apodos; el negocio necesita el nombre real de quien llega.
     setEstado('nombre', { ...ctx, hora: valor });
-    enviar(`Va quedando 📝\n\n💈 ${ctx.servicio}\n👤 ${ctx.barbero}\n📆 ${etiquetaISO(ctx.fecha)} a las ${valor}\n\n¿A nombre de quién agendo la cita? Escríbeme el nombre completo.`);
+    enviar(`Va quedando:\n\nServicio: ${ctx.servicio}\nBarbero: ${ctx.barbero}\nFecha: ${etiquetaISO(ctx.fecha)} a las ${valor}\n\n¿A nombre de quién agendo la cita? Escríbeme el nombre completo (o escribe cancelar para salir).`);
+  } else if (tipo === 'abort') {
+    limpiarEstado();
+    enviar('Listo, cancelé el proceso de agendado. ¿Te ayudo con algo más?', 'quitar');
   } else if (tipo === 'cxl') {
     // Cancelar una cita desde /miscitas. Funciona en cualquier estado;
     // la validación (que sea suya, futura y confirmada) va en el SQL.
@@ -201,16 +208,16 @@ if (cb) {
 } else if (/^\/miscitas\b/i.test(texto)) {
   const mias = $('Leer mis citas').all().map(i => i.json).filter(c => c.id !== undefined);
   if (mias.length === 0) {
-    enviar('No tienes citas próximas. Escribe "agendar" si quieres apartar una. ✂️');
+    enviar('No tienes citas próximas. Escribe "agendar" si quieres apartar una.');
   } else {
     const lineas = mias.map(c => `• ${etiquetaISO(c.fecha_iso)} ${c.ini} — ${c.servicio} con ${c.trabajador}`);
     const botones = mias.map(c => [{
-      text: `❌ Cancelar ${etiquetaISO(c.fecha_iso)} ${c.ini}`,
+      text: `Cancelar ${etiquetaISO(c.fecha_iso)} ${c.ini}`,
       callback_data: `cxl|${c.id}`,
     }]);
     enviar(`Tus próximas citas:\n\n${lineas.join('\n')}\n\nSi necesitas cancelar alguna, usa los botones:`, botones);
   }
-} else if (/^\/cancelar\b/i.test(texto)) {
+} else if (/^\/?cancelar\b/i.test(texto)) {
   limpiarEstado();
   enviar(state
     ? 'Listo, cancelé el proceso de agendado. ¿Te ayudo con algo más?'
@@ -219,16 +226,16 @@ if (cb) {
   const nombre = texto.replace(/\s+/g, ' ').trim();
   if (nombre.length < 3 || nombre.length > 60 || nombre.startsWith('/')
       || !/[a-záéíóúñü]/i.test(nombre)) {
-    enviar('Mmm, eso no parece un nombre 🤔 Escríbeme el nombre completo de quien viene a la cita (por ejemplo: "Juan Pérez").');
+    enviar('Mmm, eso no parece un nombre. Escríbeme el nombre completo de quien viene a la cita (por ejemplo: Juan Pérez).');
   } else {
     setEstado('telefono', { ...ctx, nombre });
-    enviar(`¡Gracias, ${nombre}! Ahora comparte tu teléfono con el botón de aquí abajo para confirmar tu cita 👇`, 'contacto');
+    enviar(`¡Gracias, ${nombre}! Ahora comparte tu teléfono con el botón de aquí abajo para confirmar tu cita.`, 'contacto');
   }
 } else if (upd.message?.contact && state === 'telefono') {
   const contacto = upd.message.contact;
   if (contacto.user_id && upd.message.from?.id && contacto.user_id !== upd.message.from.id) {
     // Contacto reenviado de otra persona: el teléfono debe ser del propio cliente.
-    enviar('Ese contacto no es tuyo 🤔 — usa el botón "📱 Compartir mi teléfono" para mandar tu propio número.', 'contacto');
+    enviar('Ese contacto no es tuyo. Usa el botón "Compartir mi teléfono" para mandar tu propio número.', 'contacto');
   } else {
     const nombre = ctx.nombre
       || [contacto.first_name, contacto.last_name].filter(Boolean).join(' ')
@@ -250,12 +257,12 @@ if (cb) {
     // según el resultado del INSERT (hueco libre vs recién ocupado).
   }
 } else if (state === 'telefono') {
-  enviar('Para confirmar tu cita comparte tu teléfono con el botón "📱 Compartir mi teléfono" que te mandé, o escribe /cancelar para salir.', 'contacto');
+  enviar('Para confirmar tu cita comparte tu teléfono con el botón "Compartir mi teléfono" que te mandé, o toca Cancelar para salir.', 'contacto');
 } else if (!state) {
   setEstado('servicio', {});
-  enviar('¡Va! Vamos a agendar tu cita. ¿Qué servicio quieres?', tecladoServicios());
+  enviar('¡Va! Vamos a agendar tu cita. ¿Qué servicio quieres?', conCancelar(tecladoServicios()));
 } else {
-  enviar('Estás agendando una cita — elige una opción del último menú que te mandé, o escribe /cancelar para salir.');
+  enviar('Estás agendando una cita. Elige una opción del último menú que te mandé, toca el botón Cancelar, o escribe cancelar para salir.');
 }
 
 return [{ json: { chat_id: chatId, payloads, state_op: stateOp, booking, cancel_op: cancelOp } }];

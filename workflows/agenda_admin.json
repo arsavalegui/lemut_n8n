@@ -129,7 +129,7 @@
       ],
       "parameters": {
         "chatId": "={{ $('Parsear comando').first().json.chat_id }}",
-        "text": "=✅ Listo, {{ ($('Parsear comando').first().json.nombre).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }}. Quedaste registrado como admin.\n\nComandos disponibles:\n/hoy — citas de hoy\n/agenda — próximas citas\n/agenda [barbero] — próximas citas de un barbero",
+        "text": "=Listo, {{ ($('Parsear comando').first().json.nombre).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }}. Quedaste registrado como admin.\n\nComandos disponibles:\n/hoy — citas de hoy\n/agenda — próximas citas\n/agenda [barbero] — próximas citas de un barbero",
         "additionalFields": {
           "appendAttribution": false,
           "parse_mode": "HTML"
@@ -153,7 +153,7 @@
       ],
       "parameters": {
         "chatId": "={{ $('Parsear comando').first().json.chat_id }}",
-        "text": "❌ Código incorrecto. Escribe /soyadmin seguido del código de 6 dígitos que te dieron.",
+        "text": "Código incorrecto. Escribe /soyadmin seguido del código de 6 dígitos que te dieron.",
         "additionalFields": {
           "appendAttribution": false
         }
@@ -256,7 +256,7 @@
         460
       ],
       "parameters": {
-        "jsCode": "// Arma el mensaje de agenda para el admin.\nconst p = $('Parsear comando').first().json;\nconst filas = $input.all().map(i => i.json).filter(f => f.trabajador);\nlet texto;\nif (filas.length === 0) {\n  texto = p.cmd === 'hoy'\n    ? 'No hay citas para hoy.'\n    : (p.arg ? `No hay citas próximas para \"${p.arg}\".` : 'No hay citas próximas.');\n} else {\n  const titulo = p.cmd === 'hoy'\n    ? '📅 Citas de hoy'\n    : (p.arg ? `📅 Próximas citas de ${p.arg}` : '📅 Próximas citas');\n  const lineas = filas.map(f => `• ${f.fecha} ${f.hora} — ${f.trabajador}: ${f.servicio}\\n   ${f.cliente_nombre} · ${f.cliente_telefono}`);\n  texto = `${titulo}\\n\\n${lineas.join('\\n')}`;\n}\nreturn [{ json: { texto: texto.substring(0, 4090) } }];"
+        "jsCode": "// Arma el mensaje de agenda para el admin.\nconst p = $('Parsear comando').first().json;\nconst filas = $input.all().map(i => i.json).filter(f => f.trabajador);\nlet texto;\nif (filas.length === 0) {\n  texto = p.cmd === 'hoy'\n    ? 'No hay citas para hoy.'\n    : (p.arg ? `No hay citas próximas para \"${p.arg}\".` : 'No hay citas próximas.');\n} else {\n  const titulo = p.cmd === 'hoy'\n    ? 'Citas de hoy'\n    : (p.arg ? `Próximas citas de ${p.arg}` : 'Próximas citas');\n  const lineas = filas.map(f => `• ${f.fecha} ${f.hora} — ${f.trabajador}: ${f.servicio}\\n   ${f.cliente_nombre} · ${f.cliente_telefono}`);\n  texto = `${titulo}\\n\\n${lineas.join('\\n')}`;\n}\nreturn [{ json: { texto: texto.substring(0, 4090) } }];"
       }
     },
     {

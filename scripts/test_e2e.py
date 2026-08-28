@@ -50,6 +50,11 @@ def paso(descripcion, update, esperado=None, no_esperado=None):
                        for e in eventos if e["tipo"] == "enviado")
     errores = [e for e in eventos if e["tipo"] == "error"]
     ok = True
+    import re as _re
+    emojis = _re.findall(r"[\U0001F300-\U0001FAFF\u2600-\u27BF]", textos)
+    if emojis:
+        ok = False
+        fallos.append(f"paso {paso_n} ({descripcion}): trae emojis {emojis[:5]}")
     for patron in (esperado or []):
         if patron.lower() not in textos.lower():
             ok = False
@@ -74,6 +79,10 @@ paso("pregunta por los barberos", upd_texto("¿qué barberos tienen?"),
      esperado=["Luis", "Diego", "Miguel"])
 paso("pregunta fuera del doc", upd_texto("¿quién ganó el mundial de 2022?"),
      esperado=["Solo puedo ayudarte con temas relacionados al negocio"])
+paso("políticas: debe mandar al chat, no a WhatsApp", upd_texto("¿cuáles son sus políticas?"),
+     esperado=["agendar"], no_esperado=["8765"])
+paso("da las gracias → cortesía sin re-presentarse", upd_texto("muchas gracias!"),
+     no_esperado=["Te ofrezco", "Somos Barbería"])
 
 # --- Admin: registro ---
 paso("/soyadmin con código malo", upd_texto("/soyadmin 111111"),
@@ -109,8 +118,10 @@ paso("/agenda (la cita sale con el nombre real, no el de Telegram)", upd_texto("
      esperado=["Diego Torres", "13:00", "Arturo Aragón Prueba"])
 paso("/agenda Diego (filtrada)", upd_texto("/agenda Diego"),
      esperado=["Diego Torres"])
-paso("/agenda Luis (sin citas)", upd_texto("/agenda Luis"),
-     esperado=["No hay citas próximas"])
+# Luis puede tener citas reales de otros chats — validamos el FILTRO:
+# nuestra cita de prueba es con Diego y no debe aparecer bajo Luis.
+paso("/agenda Luis (filtra: sin nuestra cita de Diego)", upd_texto("/agenda Luis"),
+     no_esperado=["Arturo Aragón Prueba"])
 
 # --- Carrera por el mismo hueco ---
 paso("otro cliente quiere agendar", upd_texto("agendar"),
@@ -130,8 +141,12 @@ paso("comparto contacto → debe rechazar por hueco ocupado", upd_contact(TEL_PR
 paso("empiezo a agendar de nuevo", upd_texto("quiero una cita"),
      esperado=["Qué servicio"])
 paso("pregunto otra cosa a media agenda", upd_texto("¿cuánto cuesta el tinte?"),
-     esperado=["Estás agendando", "/cancelar"])
-paso("/cancelar", upd_texto("/cancelar"),
+     esperado=["Estás agendando", "Cancelar"])
+paso("escribo cancelar SIN diagonal", upd_texto("cancelar"),
+     esperado=["cancelé"])
+paso("empiezo otra vez para probar el botón", upd_texto("agendar"),
+     esperado=["Qué servicio", "abort|1"])
+paso("toco el botón Cancelar del menú", upd_callback("abort|1"),
      esperado=["cancelé"])
 paso("después de cancelar, el RAG vuelve a responder", upd_texto("¿a qué hora abren los sábados?"),
      esperado=["9"])

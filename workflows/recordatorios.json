@@ -8,10 +8,18 @@
       "name": "Cada 5 minutos",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [200, 300],
+      "position": [
+        200,
+        300
+      ],
       "parameters": {
         "rule": {
-          "interval": [{ "field": "minutes", "minutesInterval": 5 }]
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
         }
       }
     },
@@ -20,7 +28,10 @@
       "name": "Citas por recordar",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [420, 300],
+      "position": [
+        420,
+        300
+      ],
       "parameters": {
         "operation": "executeQuery",
         "query": "SELECT id, trabajador, servicio, to_char(hora_inicio, 'HH24:MI') AS hora, cliente_chat_id, cliente_nombre FROM agenda.bookings WHERE estado = 'confirmada' AND reminder_sent = false AND fecha = (now() AT TIME ZONE 'America/Mexico_City')::date AND hora_inicio > (now() AT TIME ZONE 'America/Mexico_City')::time AND hora_inicio <= ((now() AT TIME ZONE 'America/Mexico_City') + interval '30 minutes')::time ORDER BY hora_inicio;",
@@ -38,9 +49,12 @@
       "name": "Armar mensaje",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [640, 300],
+      "position": [
+        640,
+        300
+      ],
       "parameters": {
-        "jsCode": "// Un recordatorio por cita, en HTML escapado (los nombres pueden traer\n// caracteres que rompen el parseo de Telegram).\nconst esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nreturn $input.all().map(({ json: c }) => ({ json: {\n  id: c.id,\n  cliente_chat_id: c.cliente_chat_id,\n  texto: `⏰ ¡Hola, ${esc(c.cliente_nombre)}! Te recordamos tu cita de HOY a las ${c.hora}:\\n\\n💈 ${esc(c.servicio)}\\n👤 ${esc(c.trabajador)}\\n\\n¡Te esperamos!`,\n} }));"
+        "jsCode": "// Un recordatorio por cita, en HTML escapado (los nombres pueden traer\n// caracteres que rompen el parseo de Telegram).\nconst esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nreturn $input.all().map(({ json: c }) => ({ json: {\n  id: c.id,\n  cliente_chat_id: c.cliente_chat_id,\n  texto: `¡Hola, ${esc(c.cliente_nombre)}! Te recordamos tu cita de HOY a las ${c.hora}:\\n\\nServicio: ${esc(c.servicio)}\\nBarbero: ${esc(c.trabajador)}\\n\\n¡Te esperamos!`,\n} }));"
       }
     },
     {
@@ -48,7 +62,10 @@
       "name": "Enviar recordatorio",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [860, 300],
+      "position": [
+        860,
+        300
+      ],
       "parameters": {
         "chatId": "={{ $json.cliente_chat_id }}",
         "text": "={{ $json.texto }}",
@@ -69,7 +86,10 @@
       "name": "Marcar enviado",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [1080, 300],
+      "position": [
+        1080,
+        300
+      ],
       "parameters": {
         "operation": "executeQuery",
         "query": "UPDATE agenda.bookings SET reminder_sent = true WHERE id = $1 RETURNING id;",
@@ -87,16 +107,48 @@
   ],
   "connections": {
     "Cada 5 minutos": {
-      "main": [[{ "node": "Citas por recordar", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Citas por recordar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Citas por recordar": {
-      "main": [[{ "node": "Armar mensaje", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Armar mensaje",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Armar mensaje": {
-      "main": [[{ "node": "Enviar recordatorio", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Enviar recordatorio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Enviar recordatorio": {
-      "main": [[{ "node": "Marcar enviado", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Marcar enviado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {

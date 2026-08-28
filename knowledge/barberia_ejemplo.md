@@ -13,7 +13,7 @@ Somos una barbería tradicional en el centro de Guadalajara, con más de 10 año
 ## Contacto
 
 - **Teléfono:** 33 1234 5678
-- **WhatsApp para citas:** 33 8765 4321
+- **WhatsApp (solo dudas):** 33 8765 4321
 - **Instagram:** @elrincondelcorte_gdl
 
 ## Horarios de atención
@@ -67,7 +67,7 @@ Aceptamos efectivo, tarjeta de débito, tarjeta de crédito, transferencia banca
 
 ## Políticas
 
-- **Citas:** Se agendan por WhatsApp al 33 8765 4321. No agendamos por Instagram ni por Facebook.
+- **Citas:** Se agendan directo en este chat: escribe la palabra agendar y sigue los pasos. También puedes llamar al 33 1234 5678. No agendamos por Instagram ni por Facebook.
 - **Cancelaciones:** Cancelar mínimo con 2 horas de anticipación. Cancelaciones tardías reiteradas pierden el derecho a agendar.
 - **Puntualidad:** Si el cliente llega más de 15 minutos tarde, se pierde la cita.
 - **Menores de edad:** Los niños menores de 8 años deben venir acompañados de un adulto.

@@ -37,7 +37,7 @@
         300
       ],
       "parameters": {
-        "jsCode": "// Decide a qué workflow va cada update de Telegram.\n// 'pendiente' significa: depende de si el usuario está a media agenda\n// (eso lo resuelve el siguiente nodo consultando conversation_state).\nconst upd = $input.first().json;\nconst text = (upd.message?.text ?? '').trim();\nconst chatId = upd.callback_query?.message?.chat?.id ?? upd.message?.chat?.id ?? 0;\nlet ruta;\nif (upd.callback_query) ruta = 'cliente';\nelse if (/^\\/(soyadmin|hoy|agenda)\\b/.test(text)) ruta = 'admin';\nelse if (/^\\/(cancelar|miscitas)\\b/i.test(text)) ruta = 'cliente';\nelse if (/\\b(agend\\w+|citas?|reserv\\w+|apartar?)\\b/i.test(text)) ruta = 'cliente';\nelse ruta = 'pendiente';\nreturn [{ json: { ...upd, _ruta: ruta, _chat_id: chatId } }];"
+        "jsCode": "// Decide a qué workflow va cada update de Telegram.\n// 'pendiente' significa: depende de si el usuario está a media agenda\n// (eso lo resuelve el siguiente nodo consultando conversation_state).\nconst upd = $input.first().json;\nconst text = (upd.message?.text ?? '').trim();\nconst chatId = upd.callback_query?.message?.chat?.id ?? upd.message?.chat?.id ?? 0;\nlet ruta;\nif (upd.callback_query) ruta = 'cliente';\nelse if (/^\\/(soyadmin|hoy|agenda)\\b/.test(text)) ruta = 'admin';\nelse if (/^\\/?(cancelar|miscitas)\\b/i.test(text)) ruta = 'cliente';\nelse if (/\\b(agend\\w+|citas?|reserv\\w+|apartar?)\\b/i.test(text)) ruta = 'cliente';\nelse ruta = 'pendiente';\nreturn [{ json: { ...upd, _ruta: ruta, _chat_id: chatId } }];"
       }
     },
     {
