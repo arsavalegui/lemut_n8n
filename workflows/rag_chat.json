@@ -69,7 +69,7 @@
     },
     {
       "id": "node-omniroute",
-      "name": "OmniRoute Chat Model",
+      "name": "Ollama Chat Model",
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1.2,
       "position": [
@@ -79,15 +79,15 @@
       "parameters": {
         "model": {
           "__rl": true,
-          "value": "auto/best-chat",
+          "value": "qwen2.5:3b-instruct",
           "mode": "id"
         },
         "options": {}
       },
       "credentials": {
         "openAiApi": {
-          "id": "OmniRouteLocal01",
-          "name": "OmniRoute local"
+          "id": "OllamaLocal0001",
+          "name": "Ollama local"
         }
       }
     },
@@ -191,7 +191,7 @@
         ]
       ]
     },
-    "OmniRoute Chat Model": {
+    "Ollama Chat Model": {
       "ai_languageModel": [
         [
           {
